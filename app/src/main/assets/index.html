@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>ChartMitra</title>
+<link rel="icon" href="icon.svg">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <main id="pages">
+    <section id="pg-watch" class="page">
+      <header class="ph"><button class="ttl" id="wlName">Watchlist <i data-i="down"></i></button><span class="sp"></span>
+        <button class="ib" id="wlAdd" aria-label="Add symbol"><i data-i="plus"></i></button></header>
+      <div class="scroll" id="wl"></div>
+    </section>
+
+    <section id="pg-chart" class="page on">
+      <div class="cwrap" id="cwrap">
+        <div id="favbar" class="favbar hide"></div>
+        <div id="chart"></div>
+        <div class="legend" id="legend">
+          <div class="l1"><span class="sicon" id="lgIcon"></span><span id="lgName">—</span><span class="mstate" id="lgState"><b></b></span></div>
+          <div class="l2" id="lgPx"></div>
+        </div>
+        <div class="cd hide" id="countdown"></div>
+        <div class="toolhint hide" id="toolHint"></div>
+        <div class="cmsg hide" id="cMsg"></div>
+        <div class="replaybar hide" id="replayBar"></div>
+        <div class="selbar hide" id="selBar"></div>
+      </div>
+      <div class="cbar">
+        <button class="wheel" id="symBtn"><small id="symPrev"></small><b id="symCur">—</b><small id="symNext"></small></button>
+        <button class="wheel tf" id="tfBtn"><small id="tfPrev"></small><b id="tfCur">15m</b><small id="tfNext"></small></button>
+        <span class="sp"></span>
+        <button class="ib" id="drawBtn" aria-label="Drawings"><i data-i="pencil"></i></button>
+        <button class="ib" id="indBtn" aria-label="Indicators"><i data-i="ind"></i></button>
+        <button class="ib" id="hubBtn" aria-label="Analysis hub"><i data-i="dots"></i></button>
+        <button class="ib" id="undoBtn" aria-label="Undo"><i data-i="undo"></i></button>
+      </div>
+    </section>
+
+    <section id="pg-explore" class="page">
+      <header class="ph"><span class="ttl">Explore</span></header>
+      <div class="chips" id="exTabs"><span class="chip on" data-t="cal">Economic calendar</span><span class="chip" data-t="crypto">Crypto movers</span><span class="chip" data-t="wl">Watchlist movers</span></div>
+      <div class="scroll" id="exBody"></div>
+    </section>
+
+    <section id="pg-news" class="page">
+      <header class="ph"><span class="ttl">News</span><span class="sp"></span><button class="ib" id="newsRef" aria-label="Refresh"><i data-i="refresh"></i></button></header>
+      <div class="chips" id="newsTabs"><span class="chip on" data-t="all">All</span><span class="chip" data-t="india">India</span><span class="chip" data-t="global">Global</span><span class="chip" data-t="gold">Gold</span><span class="chip" data-t="crypto">Crypto</span></div>
+      <div class="scroll" id="newsBody"></div>
+    </section>
+
+    <section id="pg-menu" class="page">
+      <header class="ph"><span class="ttl">Menu</span></header>
+      <div class="scroll" id="menuBody"></div>
+    </section>
+  </main>
+
+  <nav class="nav" id="nav">
+    <button data-p="watch"><i data-i="list"></i>Watchlist</button>
+    <button data-p="chart" class="on"><i data-i="chart"></i>Chart</button>
+    <button data-p="explore"><i data-i="compass"></i>Explore</button>
+    <button data-p="news"><i data-i="news"></i>News</button>
+    <button data-p="menu"><i data-i="menu"></i>Menu</button>
+  </nav>
+
+  <div class="shade hide" id="shade"></div>
+  <div class="sheet hide" id="sheet"><div class="grab"></div><div class="sh" id="shBody"></div></div>
+  <div class="toast hide" id="toast"></div>
+</div>
+<script src="klinecharts.min.js"></script>
+<script src="core.js"></script>
+<script src="indicators.js"></script>
+<script src="chart.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>

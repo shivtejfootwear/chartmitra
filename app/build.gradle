@@ -1,0 +1,44 @@
+plugins {
+    id 'com.android.application'
+}
+
+def buildNo = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
+
+android {
+    namespace 'com.shivtej.chartmitra'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.shivtej.chartmitra'
+        minSdk 26
+        targetSdk 34
+        versionCode buildNo
+        versionName "1.0." + buildNo
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('release.jks')
+            storePassword 'chartmitra123'
+            keyAlias 'chartmitra'
+            keyPassword 'chartmitra123'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

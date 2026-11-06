@@ -1,0 +1,87 @@
+name: Build APK and website
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Get chart library (KLineChart v9, open source)
+        run: |
+          mkdir -p /tmp/kc && cd /tmp/kc
+          npm pack klinecharts@9 --silent
+          tar xzf klinecharts-*.tgz
+          F=$(find package -name "klinecharts.min.js" | grep -v esm | head -1)
+          if [ -z "$F" ]; then F=$(find package -name "*.min.js" | head -1); fi
+          echo "Using $F"; test -n "$F"
+          cp "$F" "$GITHUB_WORKSPACE/app/src/main/assets/klinecharts.min.js"
+          grep -q "registerOverlay" "$GITHUB_WORKSPACE/app/src/main/assets/klinecharts.min.js"
+
+      - name: Check web code
+        run: for f in app/src/main/assets/*.js; do node --check "$f"; done
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build APK
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Name APK
+        run: cp app/build/outputs/apk/release/app-release.apk ChartMitra.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ChartMitra-apk
+          path: ChartMitra.apk
+
+      - name: Publish APK download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: ChartMitra latest
+          body: "Latest ChartMitra APK (build ${{ github.run_number }}). Install over the old one; your data stays."
+          files: ChartMitra.apk
+          make_latest: true
+
+      - name: Prepare website
+        run: |
+          mkdir -p site && cp -r app/src/main/assets/* site/
+          touch site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
