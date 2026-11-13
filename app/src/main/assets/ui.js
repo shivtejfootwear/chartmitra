@@ -407,7 +407,7 @@ let wlIdx = 0;
 function renderWatch() {
   const W = watchlists(), w = W[wlIdx] || W[0];
   $('#wlName').innerHTML = esc(w.name) + ' ' + icon('down');
-  const row = s => { const q = quote(s); const up = q && q.ch >= 0; return `<div class="row" data-k="${esc(symKey(s))}">${symIcon(s)}<div class="l"><b>${esc(s.n)}</b><small>${esc(s.x)}${q && q.st === 'closed' ? ' · Closed' : q && q.st === 'delay' ? ' · Delayed' : ''}</small></div><div class="r"><b>${q ? fmt(q.p) : '—'}</b><small class="${q ? (up ? 'up' : 'dn') : ''}">${q ? `${up ? '+' : '−'}${fmt(Math.abs(q.ch))} ${up ? '+' : '−'}${Math.abs(q.chp || 0).toFixed(2)}%` : ''}</small></div></div>`; };
+  const row = s => { const q = quote(s); const up = q && q.ch >= 0; return `<div class="row" data-k="${esc(symKey(s))}">${symIcon(s)}<div class="l"><b>${esc(s.n)}</b><small>${esc(s.x)}${q && q.st === 'closed' ? ' · Closed' : q && q.st === 'delay' ? ' · Delayed' : ''}</small></div><div class="r"><b>${q ? fmt(q.p) : '—'}</b><small class="${q ? (up ? 'up' : 'dn') : ''}">${q ? `${up ? '+' : '−'}${fmt(Math.abs(q.ch), decimals(q.p))} ${up ? '+' : '−'}${Math.abs(q.chp || 0).toFixed(2)}%` : ''}</small></div></div>`; };
   $('#wl').innerHTML = w.groups.map((g, gi) => `<div class="grp" data-g="${gi}">${esc(g.name)}</div>${g.items.map(row).join('')}`).join('') + (Quotes.needLogin && !NATIVE ? '<div class="empty">NSE, BSE and futures prices on the website come through your cloud login: Menu → Account.</div>' : '') + '<div class="hint" style="text-align:center;margin:16px">Long-press a symbol to move or remove it</div>';
 }
 function wlMenu(k) {

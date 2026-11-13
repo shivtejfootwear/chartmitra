@@ -253,7 +253,7 @@ function initChart() {
   C.chart.setBarSpace(7);
   C.chart.setLoadDataCallback && C.chart.setLoadDataCallback(onLoadMore);
   if (!C.chart.setLoadDataCallback && C.chart.loadMore) C.chart.loadMore(ts => onLoadMore({ type: 'forward', data: { timestamp: ts }, callback: (l, m) => C.chart.applyMoreData(l, m) }));
-  window.addEventListener('resize', () => { C.chart.resize(); placeCountdown(); });
+  window.addEventListener('resize', () => { C.chart.resize(); sizePanes(); placeCountdown(); });
   C.chart.subscribeAction('onVisibleRangeChange', () => placeCountdown());
   C.chart.subscribeAction('onScroll', () => placeCountdown());
   C.chart.subscribeAction('onZoom', () => placeCountdown());
@@ -263,15 +263,19 @@ function initChart() {
 }
 async function onLoadMore(params) {
   const cb = params.callback || ((l, m) => C.chart.applyMoreData(l, m));
-  if (C.replay || !C.sym || C.sym.src !== 'bn' || !C.list.length) return cb([], false);
+  if (C.replay || !C.sym || C.sym.src !== 'bn' || !C.list.length || C.moreBusy) return;
+  const my = C.seq;
+  C.moreBusy = true;
   try {
     const t = tfObj(C.tf), [iv, n] = t.bn;
     if (iv === '1s') return cb([], false);
     let more = aggregate(await bnKlines(C.sym.s, iv, 1000, C.list[0].timestamp - 1), n, t.ms, 0);
+    if (my !== C.seq || C.replay) return; // symbol or interval changed meanwhile: drop it
     more = more.filter(k => k.timestamp < C.list[0].timestamp);
     C.list = more.concat(C.list); shiftDrawIdx(more.length);
     cb(more, more.length > 0);
-  } catch (e) { cb([], false); }
+  } catch (e) { if (my === C.seq) cb([], false); }
+  finally { C.moreBusy = false; }
 }
 function shiftDrawIdx() { setTimeout(() => restoreDrawings(), 50); }
 
@@ -295,7 +299,7 @@ async function openSymbol(sym, tf) {
   await loadData();
 }
 async function loadData() {
-  const my = ++C.seq; stopLive(); showMsg('Loading…');
+  const my = ++C.seq; stopLive(); showMsg('Loading…'); C.moreBusy = false; drawPend = null; clearTimeout(drawT); drawT = null;
   try {
     const { list, meta, base } = await loadHistory(C.sym, C.tf);
     if (my !== C.seq) return;
@@ -307,7 +311,7 @@ async function loadData() {
     const d = decimals(list[list.length - 1].close);
     C.chart.setPriceVolumePrecision(d, C.sym.src === 'bn' ? 2 : 0);
     C.chart.applyNewData(viewData(list), C.sym.src === 'bn');
-    hideMsg();
+    hideMsg(); sizePanes();
     restoreDrawings(); drawAlertLines(); drawEvents(); refreshCompare();
     startLive(my);
     updateLegend();
@@ -322,12 +326,20 @@ function stopLive() { C.live = false; try { C.ws && C.ws.close(); } catch (e) { 
 /** Merge a fresh base candle into the chart (handles merged intervals like 10m, 45m, 4h). */
 function aggN() { const t = tfObj(C.tf); return C.sym.src === 'bn' ? t.bn[1] : t.yf[1]; }
 function combine(parts, b) { return { timestamp: b, open: parts[0].open, high: Math.max(...parts.map(p => p.high)), low: Math.min(...parts.map(p => p.low)), close: parts[parts.length - 1].close, volume: parts.reduce((s, p) => s + (p.volume || 0), 0) }; }
+let drawPend = null, drawT = null;
+function drawNow() {
+  clearTimeout(drawT); drawT = null; const c = drawPend; drawPend = null; if (!c || C.replay) return;
+  if (settings().chartType === 'heikin') { const h = heikin(C.list.slice(-2)); C.chart.updateData(h[h.length - 1]); }
+  else C.chart.updateData(c);
+}
+/** At most ~4 redraws a second: smooth on phones, price still exact. */
 function setLast(c) {
   const last = C.list[C.list.length - 1];
   if (last && c.timestamp < last.timestamp) return;
   if (last && c.timestamp === last.timestamp) C.list[C.list.length - 1] = c; else C.list.push(c);
-  if (settings().chartType === 'heikin') { const h = heikin(C.list.slice(-2)); C.chart.updateData(h[h.length - 1]); }
-  else C.chart.updateData(c);
+  if (drawPend && drawPend.timestamp !== c.timestamp) drawNow(); // close the old candle first
+  drawPend = c;
+  if (!drawT) drawT = setTimeout(drawNow, 250);
   C.lastTick = Date.now();
   scheduleLegend();
 }
@@ -450,7 +462,16 @@ function addIndicator(name, params, silent) {
     pane = meta.main ? C.chart.createIndicator(v, true, { id: 'candle_pane' }) : C.chart.createIndicator(v, false, { height: name === 'VOL' ? 70 : 100, dragEnabled: true });
   } catch (e) { toast('Could not add ' + meta.name); return; }
   C.ind[name] = { pane: meta.main ? 'candle_pane' : pane, p: params };
+  sizePanes();
   if (!silent) saveIndicators();
+}
+/** Indicator panes at a readable height (TradingView-like), the chart keeps the rest. */
+function sizePanes() {
+  const subs = Object.keys(C.ind).filter(n => C.ind[n].pane !== 'candle_pane');
+  if (!subs.length || !C.chart) return;
+  const H = $('#chart').clientHeight || 600;
+  const each = Math.max(70, Math.min(130, Math.floor(H * 0.42 / subs.length)));
+  subs.forEach(n => { try { C.chart.setPaneOptions({ id: C.ind[n].pane, height: n === 'VOL' ? Math.max(56, Math.round(each * 0.7)) : each, minHeight: 40, dragEnabled: true }); } catch (e) { } });
 }
 function removeIndicator(name) { const i = C.ind[name]; if (!i) return; try { C.chart.removeIndicator(i.pane, name); } catch (e) { } delete C.ind[name]; saveIndicators(); }
 function setIndicatorParams(name, params) { const i = C.ind[name]; if (!i) return; try { C.chart.overrideIndicator({ name, calcParams: params }, i.pane); } catch (e) { } i.p = params; saveIndicators(); }
