@@ -48,12 +48,12 @@ jobs:
           npx playwright install --with-deps chromium > /dev/null
           node .github/test/smoke.js
 
-      - uses: actions/upload-artifact@v4
+      - name: Save test screenshots (branch ci-shots)
         if: always()
-        with:
-          name: smoke-screenshot
-          path: smoke.png
-          if-no-files-found: ignore
+        run: |
+          mkdir -p /tmp/shots && cp smoke*.png /tmp/shots/ 2>/dev/null || exit 0
+          cd /tmp/shots && git init -q && git checkout -q -b ci-shots && git add . && git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "screens ${{ github.run_number }}"
+          git push -fq "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" ci-shots
 
       - uses: actions/setup-java@v4
         with:

@@ -371,7 +371,7 @@ function startLive(my) {
   const t = tfObj(C.tf);
   if (C.sym.src === 'bn') {
     const s = C.sym.s.toLowerCase(), iv = t.bn[0];
-    const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${s}@kline_${iv}/${s}@aggTrade`);
+    const ws = bnSocket(`/stream?streams=${s}@kline_${iv}/${s}@aggTrade`);
     ws.onmessage = ev => {
       if (my !== C.seq || C.replay) return;
       const m = JSON.parse(ev.data), d = m.data; if (!d) return;

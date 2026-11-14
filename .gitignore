@@ -7,3 +7,4 @@ site/
 *.apk
 node_modules/
 smoke.png
+smoke*.png

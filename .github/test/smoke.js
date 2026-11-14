@@ -29,6 +29,7 @@ const { chromium } = require('playwright');
     await new Promise(r => setTimeout(r, 300));
     try { indicatorIcon({ indicatorName: 'RSI', paneId: C.ind.RSI.pane, iconId: 'cm_vis' }); indicatorIcon({ indicatorName: 'RSI', paneId: C.ind.RSI.pane, iconId: 'cm_vis' }); indicatorIcon({ indicatorName: 'CCI', paneId: C.ind.CCI.pane, iconId: 'cm_del' }); out.iconsOk = !C.ind.CCI; } catch (e) { err('icons', e); }
     for (const i of IND_LIST) { if (!['VOL', 'RSI', 'STOCHRSI'].includes(i.id)) try { removeIndicator(i.id); } catch (e) { } }
+    await new Promise(r => setTimeout(r, 300));
     // y-axis scale + auto
     try { const ax = yAxisOf('candle_pane'); const r = ax.getRange(); setYRange(ax, r.from - r.range * 0.3, r.to + r.range * 0.3); out.manual = !ax.getAutoCalcTickFlag(); resetAuto(); out.auto = ax.getAutoCalcTickFlag(); } catch (e) { err('yaxis', e); }
     try { C.chart.zoomAtCoordinate(1.3, { x: 150, y: 0 }); const id = C.ind.RSI.pane; C.chart.setPaneOptions({ id, height: 160 }); out.paneH = C.chart.getSize(id).height; } catch (e) { err('zoom', e); }
@@ -42,14 +43,26 @@ const { chromium } = require('playwright');
       } catch (e) { out.tools[t.id] = 'ERR ' + e.message; }
     }
     await new Promise(r => setTimeout(r, 400));
+    return out;
+  });
+  await p.screenshot({ path: 'smoke-tools.png' });
+  // a realistic chart: a few drawings, then the rest of the checks
+  await p.evaluate(() => { C.chart.removeOverlay({ groupId: 'draw' }); const n = C.list.length, P = (i, d) => ({ timestamp: C.list[i].timestamp, dataIndex: i, value: C.list[i].close + (d || 0) });
+    C.chart.createOverlay({ name: 'segment', groupId: 'draw', points: [P(n - 70), P(n - 10)] });
+    C.chart.createOverlay({ name: 'cmFib', groupId: 'draw', points: [P(n - 60, 10), P(n - 25, -10)] });
+    C.chart.createOverlay({ name: 'horizontalStraightLine', groupId: 'draw', points: [P(n - 30)] }); });
+  await p.waitForTimeout(500);
+  await p.screenshot({ path: 'smoke.png' });
+  const res2 = await p.evaluate(async () => {
+    const out = {}; const err = (k, e) => { out[k] = 'ERR ' + (e && e.message || e); };
     try { C.chart.removeOverlay({ groupId: 'draw' }); } catch (e) { err('rmov', e); }
     try { await startReplay(null); replayStep(1); replayStep(1); replayStep(-1); stopReplay(true); out.replay = true; } catch (e) { err('replay', e); }
     try { UI.hub(); UI.hubAct('tech'); UI.hubAct('pivots'); UI.indSettings('RSI'); UI.close(); out.ui = true; } catch (e) { err('ui', e); }
     try { selfHeal(); out.heal = true; } catch (e) { err('heal', e); }
     return out;
   });
-  await p.evaluate(() => { const ax = yAxisOf('candle_pane'); }).catch(() => {});
-  await p.screenshot({ path: 'smoke.png' });
+  Object.assign(res, res2);
+  await p.click('#hubBtn'); await p.waitForTimeout(300); await p.screenshot({ path: 'smoke-hub.png' });
   console.log(JSON.stringify(res, null, 1));
   const bad = [];
   if (!(res.dataLen > 100)) bad.push('chart has no data');
@@ -58,7 +71,7 @@ const { chromium } = require('playwright');
   Object.entries(res.tools || {}).forEach(([k, v]) => { if (v !== true) bad.push('tool ' + k + ': ' + v); });
   ['manual', 'auto', 'replay', 'ui', 'heal', 'iconsOk'].forEach(k => { if (res[k] !== true) bad.push(k + ': ' + res[k]); });
   Object.entries(res).forEach(([k, v]) => { if (typeof v === 'string' && v.startsWith('ERR')) bad.push(k + ' ' + v); });
-  errs.filter(e => !/offline|Failed to load resource|ERR_|Proxy|LOGIN/i.test(e)).forEach(e => bad.push(e));
+  errs.filter(e => !/offline|Failed to load resource|ERR_|Proxy|LOGIN|WebSocket/i.test(e)).forEach(e => bad.push(e));
   await b.close();
   if (bad.length) { console.log('FAILED:\n' + bad.join('\n')); process.exit(1); }
   console.log('SMOKE OK');

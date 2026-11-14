@@ -253,6 +253,15 @@ const TFS = [
 const tfObj = k => TFS.find(t => t.k === k) || TFS[8];
 const BASE_MS = { '1s': 1e3, '1m': 6e4, '3m': 18e4, '5m': 3e5, '15m': 9e5, '30m': 18e5, '1h': 36e5, '2h': 72e5, '4h': 144e5, '60m': 36e5, '1d': 864e5, '1w': 6048e5, '1wk': 6048e5, '1M': 2592e6, '1mo': 2592e6 };
 const bnBase = ['https://api.binance.com', 'https://data-api.binance.vision'];
+// live socket hosts: main one first, public market-data mirror if it is blocked in a region
+const BN_WS = ['wss://stream.binance.com:9443', 'wss://data-stream.binance.vision'];
+let bnWsIdx = 0;
+function bnSocket(path) {
+  const ws = new WebSocket(BN_WS[bnWsIdx] + path); let opened = false;
+  ws.addEventListener('open', () => { opened = true; });
+  ws.addEventListener('close', () => { if (!opened) bnWsIdx = (bnWsIdx + 1) % BN_WS.length; });
+  return ws;
+}
 
 function sessionOffset(sym) { return sym.cat === 'in' ? (3 * 60 + 45) * 6e4 : 0; } // NSE opens 09:15 IST = 03:45 UTC
 function bucketOf(ts, ms, off) { return Math.floor((ts - off) / ms) * ms + off; }
@@ -344,7 +353,7 @@ function liveTickers(bn) {
   if (Quotes.ws && Quotes.wsSyms === key && Quotes.ws.readyState <= 1) return;
   try { Quotes.ws && Quotes.ws.close(); } catch (e) { }
   Quotes.wsSyms = key;
-  const ws = new WebSocket('wss://stream.binance.com:9443/stream?streams=' + bn.map(s => s.s.toLowerCase() + '@miniTicker').join('/'));
+  const ws = bnSocket('/stream?streams=' + bn.map(s => s.s.toLowerCase() + '@miniTicker').join('/'));
   ws.onmessage = ev => {
     const t = JSON.parse(ev.data).data; if (!t) return;
     const q = Quotes.data['bn:' + t.s] || {}; const p = +t.c, o = +t.o;
