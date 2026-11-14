@@ -182,9 +182,25 @@ const UI = {
         if (e.target.id === 'tplSave') { const n = prompt('Template name', 'My indicators'); if (!n) return; tpl.push({ name: n, cfg: Object.keys(C.ind).map(k => ({ n: k, p: C.ind[k].p })) }); Store.set('indTpl', tpl); this.indSheet(cat); return; }
         const tp = e.target.closest('[data-tpl]'); if (tp) { setIndicators(tpl[+tp.dataset.tpl].cfg); this.indSheet('Active'); return; }
         const r = e.target.closest('.irow'); if (!r) return; const id = r.dataset.id;
-        if (e.target.closest('[data-set]')) { const cur = indicatorParams(id) || []; const v = prompt('Inputs (comma separated)', cur.join(', ')); if (v == null) return; const p = v.split(',').map(x => parseFloat(x)).filter(x => !isNaN(x)); if (p.length) setIndicatorParams(id, p); this.indSheet(cat); return; }
+        if (e.target.closest('[data-set]')) { this.indSettings(id); return; }
         C.ind[id] ? removeIndicator(id) : addIndicator(id); this.indSheet(cat);
       };
+    });
+  },
+
+  /* ----- one indicator: inputs, show/hide, remove ----- */
+  indSettings(name) {
+    const meta = IND_LIST.find(i => i.id === name), rec = C.ind[name]; if (!meta || !rec) return;
+    const cur = indicatorParams(name) || [];
+    const LBL = { RSI: ['Length'], STOCHRSI: ['K smoothing', 'D smoothing', 'RSI length', 'Stochastic length'], STOCH: ['%K length', '%K smoothing', '%D smoothing'], MACD: ['Fast length', 'Slow length', 'Signal length'], BOLL: ['Length', 'StdDev'], SUPERTREND: ['ATR length', 'Factor'], KELTNER: ['Length', 'Multiplier'], ICHIMOKU: ['Conversion', 'Base', 'Span B', 'Displacement'], UO: ['Fast', 'Middle', 'Slow'] };
+    const labels = LBL[name] || [];
+    this.open(`<h2>${esc(meta.name)}</h2><div class="grp">Inputs</div>
+      ${cur.map((v, i) => `<div class="lbl">${esc(labels[i] || (cur.length > 1 ? 'Length ' + (i + 1) : 'Length'))}</div><input class="inp" inputmode="decimal" data-i="${i}" value="${v}">`).join('') || '<div class="hint">No inputs for this indicator</div>'}
+      <div class="irow" style="margin-top:14px"><div class="n">Visible on chart</div><span class="sw ${rec.hide ? '' : 'on'}" id="isVis"></span></div>
+      <div class="pad" style="display:flex;gap:8px;margin-top:6px">${cur.length ? '<button class="btn pri" id="isOk">Apply</button>' : ''}<button class="btn red" id="isDel">${icon('trash')}Remove</button></div>`, root => {
+      const ok = $('#isOk'); if (ok) ok.onclick = () => { const p = $$('input[data-i]', root).map(i => parseFloat(i.value)); if (p.some(x => isNaN(x) || x <= 0)) { toast('Enter numbers above 0'); return; } setIndicatorParams(name, p); this.close(); };
+      $('#isVis').onclick = () => { rec.hide = !rec.hide; C.chart.overrideIndicator({ name, visible: !rec.hide }, rec.pane); saveIndicators(); this.indSettings(name); };
+      $('#isDel').onclick = () => { removeIndicator(name); this.close(); };
     });
   },
 

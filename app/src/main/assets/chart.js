@@ -18,9 +18,12 @@ function themeStyles() {
       bar: { upColor: UP(), downColor: DN(), noChangeColor: '#787b86', upBorderColor: UP(), downBorderColor: DN(), noChangeBorderColor: '#787b86', upWickColor: UP(), downWickColor: DN(), noChangeWickColor: '#787b86' },
       area: { lineSize: 1.5, lineColor: '#2962ff', value: 'close', backgroundColor: s.chartType === 'line' ? [{ offset: 0, color: 'rgba(41,98,255,0)' }, { offset: 1, color: 'rgba(41,98,255,0)' }] : [{ offset: 0, color: 'rgba(41,98,255,0.01)' }, { offset: 1, color: 'rgba(41,98,255,0.18)' }] },
       priceMark: { high: { color: tx, textSize: 10 }, low: { color: tx, textSize: 10 }, last: { upColor: UP(), downColor: DN(), noChangeColor: '#787b86', line: { show: true, style: 'dashed', dashedValue: [1, 3], size: 1 }, text: { size: 11, paddingLeft: 5, paddingRight: 5, paddingTop: 3, paddingBottom: 3, borderRadius: 2 } } },
-      tooltip: { showRule: 'follow_cross', showType: 'standard', text: { size: 11, color: tx } }
+      tooltip: { showRule: 'always', showType: 'standard', offsetTop: 50, offsetLeft: 8, text: { size: 11, color: tx, marginLeft: 0, marginRight: 8 },
+        custom: d => { const k = d.current; if (!k) return []; const c = k.close >= k.open ? UP() : DN(), dd = decimals(k.close);
+          return [['O', k.open], ['H', k.high], ['L', k.low], ['C', k.close]].map(([t, v]) => ({ title: t + ' ', value: { text: fmt(v, dd), color: c } })).concat([{ title: 'Vol ', value: { text: fmtVol(k.volume || 0), color: tx } }]); } }
     },
-    indicator: { lastValueMark: { show: false }, tooltip: { showRule: 'always', showType: 'standard', text: { size: 11, color: tx } } },
+    indicator: { lastValueMark: { show: false }, tooltip: { showRule: 'always', showType: 'standard', offsetTop: 12, text: { size: 11, color: tx },
+      icons: [['cm_vis', '◉'], ['cm_set', '⚙'], ['cm_del', '✕']].map(([id, icon]) => ({ id, icon, position: 'middle', fontFamily: 'sans-serif', size: 14, color: dark ? '#b2b5be' : '#787b86', activeColor: '#2962ff', backgroundColor: 'transparent', activeBackgroundColor: 'rgba(41,98,255,0.12)', marginLeft: 6, marginTop: 0, marginRight: 0, marginBottom: 0, paddingLeft: 4, paddingTop: 2, paddingRight: 4, paddingBottom: 2 })) } },
     xAxis: { axisLine: { color: ln }, tickLine: { show: false }, tickText: { color: tx, size: 11 } },
     yAxis: { type: s.log ? 'log' : s.pct ? 'percentage' : 'normal', axisLine: { color: ln }, tickLine: { show: false }, tickText: { color: tx, size: 11 } },
     separator: { color: ln, size: 1 },
@@ -258,8 +261,11 @@ function initChart() {
   C.chart.subscribeAction('onScroll', () => placeCountdown());
   C.chart.subscribeAction('onZoom', () => placeCountdown());
   setInterval(tickCountdown, 1000);
+  C.chart.subscribeAction('onTooltipIconClick', d => { try { indicatorIcon(d); } catch (e) { } });
+  setupGestures();
+  setInterval(selfHeal, 5000);
   const cfg = Store.get('ind', null) || [{ n: 'VOL' }, { n: 'STOCHRSI' }, { n: 'RSI' }];
-  cfg.forEach(c => addIndicator(c.n, c.p, true));
+  cfg.forEach(c => addIndicator(c.n, c.p, true, c.h));
 }
 async function onLoadMore(params) {
   const cb = params.callback || ((l, m) => C.chart.applyMoreData(l, m));
@@ -287,7 +293,8 @@ function applyTheme() {
 
 /* ---------- data + live ---------- */
 function heikin(list) { const o = []; list.forEach((k, i) => { const c = (k.open + k.high + k.low + k.close) / 4, op = i ? (o[i - 1].open + o[i - 1].close) / 2 : (k.open + k.close) / 2; o.push({ timestamp: k.timestamp, open: op, close: c, high: Math.max(k.high, op, c), low: Math.min(k.low, op, c), volume: k.volume }); }); return o; }
-const viewData = l => settings().chartType === 'heikin' ? heikin(l) : l;
+// always a copy: the chart must own its array, or new candles get pushed without the chart knowing (chart freezes)
+const viewData = l => settings().chartType === 'heikin' ? heikin(l) : l.slice();
 
 async function openSymbol(sym, tf) {
   if (C.replay) stopReplay(true);
@@ -376,8 +383,9 @@ function startLive(my) {
         C._tq = p; requestAnimationFrame(() => { const q = C._tq; C._tq = null; if (!C.replay && my === C.seq) pushPrice(q); });
       }
     };
-    ws.onclose = () => { if (my === C.seq && C.live && !C.replay) setTimeout(() => { if (my === C.seq && C.live) { // fill the gap, then reconnect
-      bnKlines(C.sym.s, iv, 5).then(l => l.forEach(pushBase)).catch(() => { }); startLive(my); } }, 2000); };
+    ws.onclose = () => { if (my === C.seq && C.live && !C.replay) setTimeout(() => { if (my !== C.seq || !C.live) return;
+      if (Date.now() - (C.lastTick || 0) > t.ms * 3) { loadData(); return; } // long gap (phone slept): reload everything
+      bnKlines(C.sym.s, iv, 5).then(l => l.forEach(pushBase)).catch(() => { }); startLive(my); }, 2000); };
     C.ws = ws;
   } else {
     const [iv] = t.yf, rng = ['1m', '2m', '5m', '15m', '30m'].includes(iv) ? '1d' : iv === '60m' ? '5d' : iv === '1d' ? '5d' : iv === '1wk' ? '1mo' : '1y';
@@ -454,14 +462,15 @@ function showMsg(h) { const m = $('#cMsg'); m.innerHTML = h; m.classList.remove(
 function hideMsg() { $('#cMsg').classList.add('hide'); }
 
 /* ---------- indicators ---------- */
-function addIndicator(name, params, silent) {
+function addIndicator(name, params, silent, hide) {
   const meta = IND_LIST.find(i => i.id === name); if (!meta || C.ind[name]) return;
   const v = params ? { name, calcParams: params } : name;
   let pane;
   try {
     pane = meta.main ? C.chart.createIndicator(v, true, { id: 'candle_pane' }) : C.chart.createIndicator(v, false, { height: name === 'VOL' ? 70 : 100, dragEnabled: true });
   } catch (e) { toast('Could not add ' + meta.name); return; }
-  C.ind[name] = { pane: meta.main ? 'candle_pane' : pane, p: params };
+  C.ind[name] = { pane: meta.main ? 'candle_pane' : pane, p: params, hide: !!hide };
+  if (hide) { try { C.chart.overrideIndicator({ name, visible: false }, C.ind[name].pane); } catch (e) { } }
   sizePanes();
   if (!silent) saveIndicators();
 }
@@ -471,13 +480,14 @@ function sizePanes() {
   if (!subs.length || !C.chart) return;
   const H = $('#chart').clientHeight || 600;
   const each = Math.max(70, Math.min(130, Math.floor(H * 0.42 / subs.length)));
-  subs.forEach(n => { try { C.chart.setPaneOptions({ id: C.ind[n].pane, height: n === 'VOL' ? Math.max(56, Math.round(each * 0.7)) : each, minHeight: 40, dragEnabled: true }); } catch (e) { } });
+  const saved = Store.get('paneH', {});
+  subs.forEach(n => { const id = C.ind[n].pane; try { C.chart.setPaneOptions({ id, height: saved[n] || (n === 'VOL' ? Math.max(56, Math.round(each * 0.7)) : each), minHeight: 40, dragEnabled: true }); } catch (e) { } });
 }
 function removeIndicator(name) { const i = C.ind[name]; if (!i) return; try { C.chart.removeIndicator(i.pane, name); } catch (e) { } delete C.ind[name]; saveIndicators(); }
 function setIndicatorParams(name, params) { const i = C.ind[name]; if (!i) return; try { C.chart.overrideIndicator({ name, calcParams: params }, i.pane); } catch (e) { } i.p = params; saveIndicators(); }
 function indicatorParams(name) { const i = C.ind[name]; if (i && i.p) return i.p; try { const x = C.chart.getIndicatorByPaneId(i ? i.pane : undefined, name); return x && x.calcParams; } catch (e) { return null; } }
-function saveIndicators() { Store.set('ind', Object.keys(C.ind).map(n => ({ n, p: C.ind[n].p }))); }
-function setIndicators(cfg) { Object.keys(C.ind).forEach(n => { try { C.chart.removeIndicator(C.ind[n].pane, n); } catch (e) { } }); C.ind = {}; (cfg || []).forEach(c => addIndicator(c.n, c.p, true)); saveIndicators(); }
+function saveIndicators() { Store.set('ind', Object.keys(C.ind).map(n => ({ n, p: C.ind[n].p, h: C.ind[n].hide || undefined }))); }
+function setIndicators(cfg) { Object.keys(C.ind).forEach(n => { try { C.chart.removeIndicator(C.ind[n].pane, n); } catch (e) { } }); C.ind = {}; (cfg || []).forEach(c => addIndicator(c.n, c.p, true, c.h)); saveIndicators(); }
 
 /* ---------- drawings ---------- */
 function drawKey() { return 'drw:' + symKey(C.sym); }
@@ -677,4 +687,90 @@ function showPivots(on) {
   try { C.chart.removeOverlay({ groupId: 'piv' }); } catch (e) { }
   if (!on) return; const p = pivots(); if (!p) return; const last = C.list[C.list.length - 1];
   Object.entries(p).forEach(([k, v]) => C.chart.createOverlay({ name: 'horizontalStraightLine', groupId: 'piv', lock: true, points: [{ timestamp: last.timestamp, dataIndex: C.list.length - 1, value: v }], styles: { line: { color: k === 'P' ? '#f59e0b' : k[0] === 'R' ? '#f23645' : '#089981', style: 'dashed', dashedValue: [6, 4], size: 1 } } }));
+}
+
+
+/* ---------- self-heal: chart always matches the live data ---------- */
+function selfHeal() {
+  if (!C.chart || !C.sym || C.replay || !C.list.length || document.hidden) return;
+  try {
+    const dl = C.chart.getDataList(), a = dl[dl.length - 1], b = C.list[C.list.length - 1];
+    if (!a || a.timestamp !== b.timestamp || (settings().chartType !== 'heikin' && a.close !== b.close && !drawT)) {
+      C.chart.applyNewData(viewData(C.list), C.sym.src === 'bn'); restoreDrawings(); drawAlertLines();
+    }
+    // crypto runs 24/7: if the newest candle is far behind the clock, reload
+    if (C.sym.src === 'bn' && Date.now() - b.timestamp > tfObj(C.tf).ms * 3 + 60000) loadData();
+  } catch (e) { }
+}
+
+/* ---------- indicator legend icons: hide / settings / remove (right on the chart) ---------- */
+function indicatorIcon(d) {
+  const name = d.indicatorName, pane = d.paneId;
+  if (name === 'CMP') { if (d.iconId === 'cm_del') setCompare(null); return; }
+  const meta = IND_LIST.find(i => i.id === name), rec = C.ind[name];
+  if (d.iconId === 'cm_del') { removeIndicator(name); toast((meta ? meta.name : name) + ' removed'); }
+  else if (d.iconId === 'cm_vis') { if (!rec) return; rec.hide = !rec.hide; C.chart.overrideIndicator({ name, visible: !rec.hide }, pane); saveIndicators(); }
+  else if (d.iconId === 'cm_set') UI.indSettings(name);
+}
+
+/* ---------- touch gestures like TradingView ----------
+   drag the price scale up/down = squeeze/stretch candles · double-tap it = auto
+   drag the time scale = zoom · drag a pane's top edge = resize · after manual scale, drag chart up/down = move */
+function chartPanes() { return ['candle_pane'].concat([...new Set(Object.values(C.ind).map(i => i.pane).filter(p => p && p !== 'candle_pane'))]); }
+function yAxisOf(id) { try { const p = C.chart.getDrawPaneById(id); return p && p.getAxisComponent(); } catch (e) { return null; } }
+function setYRange(ax, from, to) {
+  ax.setRange({ from, to, range: to - from, realFrom: ax.convertToRealValue(from), realTo: ax.convertToRealValue(to), realRange: ax.convertToRealValue(to) - ax.convertToRealValue(from) });
+  C.chart.adjustPaneViewport(false, true, true, true);
+  updateAutoChip(); placeCountdown();
+}
+function resetAuto() {
+  chartPanes().forEach(id => { const ax = yAxisOf(id); if (ax && !ax.getAutoCalcTickFlag()) ax.setAutoCalcTickFlag(true); });
+  try { C.chart.adjustPaneViewport(false, true, true, true); } catch (e) { }
+  updateAutoChip(); placeCountdown();
+}
+function updateAutoChip() {
+  let chip = $('#autoChip');
+  if (!chip) { chip = document.createElement('button'); chip.id = 'autoChip'; chip.className = 'autochip hide'; chip.textContent = 'Auto'; chip.onclick = resetAuto; $('#cwrap').appendChild(chip); }
+  const manual = chartPanes().some(id => { const ax = yAxisOf(id); return ax && !ax.getAutoCalcTickFlag(); });
+  chip.classList.toggle('hide', !manual);
+}
+function setupGestures() {
+  const el = $('#chart'); let g = null, lastAxisTap = 0;
+  const pt = t => { const r = el.getBoundingClientRect(); return { x: t.clientX - r.left, y: t.clientY - r.top }; };
+  const paneAt = y => { for (const id of chartPanes()) { const b = C.chart.getSize(id); if (b && y >= b.top && y < b.top + b.height) return { id, b }; } return null; };
+  el.addEventListener('touchstart', e => {
+    g = null; if (e.touches.length !== 1 || !C.chart) return;
+    const p = pt(e.touches[0]), pane = paneAt(p.y), xb = C.chart.getSize('x_axis_pane');
+    if (xb && p.y >= xb.top) { g = { m: 'x', x: p.x, x0: p.x }; }
+    else if (pane) {
+      const yb = C.chart.getSize(pane.id, 'yAxis');
+      if (pane.id !== 'candle_pane' && Math.abs(p.y - pane.b.top) < 11) g = { m: 'h', id: pane.id, h0: pane.b.height, y0: p.y };
+      else if (yb && p.x >= yb.left) { const ax = yAxisOf(pane.id); if (ax) { const r = ax.getRange(); g = { m: 'y', ax, r: Object.assign({}, r), y0: p.y, t0: Date.now(), moved: false, h: pane.b.height }; } }
+      else { const ax = yAxisOf(pane.id); if (ax && !ax.getAutoCalcTickFlag() && !C.tool) { g = { m: 'pan', ax, y: p.y, h: pane.b.height, pass: true }; } }
+    }
+    if (g && !g.pass) { e.stopPropagation(); }
+  }, { capture: true, passive: true });
+  el.addEventListener('touchmove', e => {
+    if (!g || e.touches.length !== 1) return;
+    const p = pt(e.touches[0]);
+    if (g.m === 'y') {
+      const dy = p.y - g.y0; if (Math.abs(dy) > 4) g.moved = true;
+      const k = Math.exp(dy / 160), mid = (g.r.from + g.r.to) / 2, half = g.r.range * k / 2;
+      setYRange(g.ax, mid - half, mid + half);
+    } else if (g.m === 'x') {
+      const dx = p.x - g.x; g.x = p.x; if (dx) C.chart.zoomAtCoordinate(Math.exp(dx / 120), { x: g.x0, y: 0 });
+    } else if (g.m === 'h') {
+      C.chart.setPaneOptions({ id: g.id, height: Math.max(40, Math.min(420, Math.round(g.h0 - (p.y - g.y0)))) }); placeCountdown();
+    } else if (g.m === 'pan') {
+      const dy = p.y - g.y; g.y = p.y; const r = g.ax.getRange(); const d = r.range * dy / g.h; setYRange(g.ax, r.from + d, r.to + d); return;
+    }
+    if (e.cancelable) e.preventDefault(); e.stopPropagation();
+  }, { capture: true, passive: false });
+  el.addEventListener('touchend', e => {
+    if (g && g.m === 'y' && !g.moved) { const now = Date.now(); if (now - lastAxisTap < 350) { resetAuto(); lastAxisTap = 0; } else lastAxisTap = now; }
+    if (g && g.m === 'h') { const h = Store.get('paneH', {}); Object.keys(C.ind).forEach(n => { const b = C.chart.getSize(C.ind[n].pane); if (b && C.ind[n].pane !== 'candle_pane') h[n] = b.height; }); Store.set('paneH', h); }
+    if (g && !g.pass) e.stopPropagation();
+    g = null;
+  }, { capture: true });
+  el.addEventListener('dblclick', e => { const r = el.getBoundingClientRect(), x = e.clientX - r.left, yb = C.chart.getSize('candle_pane', 'yAxis'); if (yb && x >= yb.left) resetAuto(); });
 }

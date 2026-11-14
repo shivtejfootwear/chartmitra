@@ -129,3 +129,4 @@ svg.ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.5;str
   .sheet{left:auto;right:16px;bottom:16px;top:16px;width:420px;border-radius:18px;max-height:none}
   .cbar{height:56px}
 }
+.autochip{position:absolute;right:66px;bottom:34px;z-index:4;background:var(--bg);border:1px solid var(--ln);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;color:var(--acc)}

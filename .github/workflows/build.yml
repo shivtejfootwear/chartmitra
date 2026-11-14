@@ -41,6 +41,20 @@ jobs:
       - name: Check web code
         run: for f in app/src/main/assets/*.js; do node --check "$f"; done
 
+      - name: Test web app in a real browser
+        run: |
+          mkdir -p site && cp -r app/src/main/assets/* site/
+          npm i --no-save --silent playwright@1.48.2
+          npx playwright install --with-deps chromium > /dev/null
+          node .github/test/smoke.js
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-screenshot
+          path: smoke.png
+          if-no-files-found: ignore
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -72,7 +86,7 @@ jobs:
 
       - name: Prepare website
         run: |
-          mkdir -p site && cp -r app/src/main/assets/* site/
+          rm -rf site && mkdir -p site && cp -r app/src/main/assets/* site/
           touch site/.nojekyll
 
       - uses: actions/configure-pages@v5

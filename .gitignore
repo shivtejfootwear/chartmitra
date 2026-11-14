@@ -5,3 +5,5 @@ local.properties
 app/src/main/assets/klinecharts.min.js
 site/
 *.apk
+node_modules/
+smoke.png
