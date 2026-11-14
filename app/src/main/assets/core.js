@@ -77,7 +77,7 @@ function nativeCall(fn, ...args) {
     Android[fn](id, ...args);
   });
 }
-const CORS_OK = ['api.binance.com', 'data-api.binance.vision'];
+const CORS_OK = ['api.binance.com', 'data-api.binance.vision', 'fapi.binance.com'];
 async function http(url) {
   if (NATIVE) return nativeCall('fetch', url);
   const host = new URL(url).hostname;
@@ -186,6 +186,10 @@ function settings() { return Object.assign({}, DEF_SET, Store.get('set', {})); }
 function setSetting(k, v) { const s = Store.get('set', {}); s[k] = v; Store.set('set', s); }
 
 /* ---------- symbols ---------- */
+// Gold and silver: Binance XAUUSDT / XAGUSDT contracts track spot metal price, live 24/7, free, no key
+const XAU_SYM = { s: 'XAUUSDT', n: 'XAUUSD', d: 'Gold Spot / U.S. Dollar', x: 'Binance', src: 'bf', cat: 'gold', cur: 'USD' };
+const XAG_SYM = { s: 'XAGUSDT', n: 'XAGUSD', d: 'Silver Spot / U.S. Dollar', x: 'Binance', src: 'bf', cat: 'silver', cur: 'USD' };
+const isBin = s => !!s && (s.src === 'bn' || s.src === 'bf');
 const SYM_ICON = { in: ['#ff6d00', 'IN'], gold: ['#e8b84a', 'Au'], silver: ['#9598a1', 'Ag'], crypto: ['#f7931a', '₿'], us: ['#2962ff', 'US'], fx: ['#26a69a', 'FX'], other: ['#787b86', '•'] };
 const DEFAULT_WL = [
   { name: 'Indices', items: [
@@ -196,7 +200,7 @@ const DEFAULT_WL = [
     { s: '^GSPC', n: 'SPX', d: 'S&P 500 Index', x: 'US', src: 'yf', cat: 'us', cur: 'USD' },
     { s: '^IXIC', n: 'NASDAQ', d: 'Nasdaq Composite', x: 'US', src: 'yf', cat: 'us', cur: 'USD' }] },
   { name: 'Gold and commodities', items: [
-    { s: 'PAXGUSDT', n: 'XAUUSD', d: 'Gold Spot / U.S. Dollar', x: 'Binance', src: 'bn', cat: 'gold', cur: 'USD' },
+    XAU_SYM, XAG_SYM,
     { s: 'GC=F', n: 'GOLD FUT', d: 'Gold Futures (COMEX)', x: 'COMEX', src: 'yf', cat: 'gold', cur: 'USD' },
     { s: 'SI=F', n: 'SILVER FUT', d: 'Silver Futures (COMEX)', x: 'COMEX', src: 'yf', cat: 'silver', cur: 'USD' },
     { s: 'GOLDBEES.NS', n: 'GOLDBEES', d: 'Nippon India Gold ETF', x: 'NSE', src: 'yf', cat: 'gold', cur: 'INR' },
@@ -211,7 +215,8 @@ const DEFAULT_WL = [
     { s: 'ETHUSDT', n: 'ETHUSDT', d: 'Ethereum / TetherUS', x: 'Binance', src: 'bn', cat: 'crypto', cur: 'USDT' },
     { s: 'SOLUSDT', n: 'SOLUSDT', d: 'Solana / TetherUS', x: 'Binance', src: 'bn', cat: 'crypto', cur: 'USDT' },
     { s: 'BNBUSDT', n: 'BNBUSDT', d: 'BNB / TetherUS', x: 'Binance', src: 'bn', cat: 'crypto', cur: 'USDT' },
-    { s: 'XRPUSDT', n: 'XRPUSDT', d: 'XRP / TetherUS', x: 'Binance', src: 'bn', cat: 'crypto', cur: 'USDT' }] }
+    { s: 'XRPUSDT', n: 'XRPUSDT', d: 'XRP / TetherUS', x: 'Binance', src: 'bn', cat: 'crypto', cur: 'USDT' },
+    { s: 'PAXGUSDT', n: 'PAXGUSDT', d: 'PAX Gold token / TetherUS', x: 'Binance', src: 'bn', cat: 'crypto', cur: 'USDT' }] }
 ];
 const symKey = o => o.src + ':' + o.s;
 function watchlists() { return Store.get('wls', null) || [{ id: 'main', name: 'Watchlist', groups: DEFAULT_WL }]; }
@@ -222,6 +227,8 @@ async function searchSymbols(q) {
   q = q.trim(); if (q.length < 1) return [];
   const out = [], Q = q.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const bnTry = Q.endsWith('USDT') || Q.endsWith('USDC') || Q.endsWith('BTC') ? [Q] : [Q + 'USDT'];
+  if (/^(XAU|XAUUSD|GOLD|XAUUSDT)$/.test(Q)) out.push(XAU_SYM);
+  if (/^(XAG|XAGUSD|SILVER|XAGUSDT)$/.test(Q)) out.push(XAG_SYM);
   await Promise.all([
     (async () => {
       try {
@@ -252,14 +259,19 @@ const TFS = [
 ];
 const tfObj = k => TFS.find(t => t.k === k) || TFS[8];
 const BASE_MS = { '1s': 1e3, '1m': 6e4, '3m': 18e4, '5m': 3e5, '15m': 9e5, '30m': 18e5, '1h': 36e5, '2h': 72e5, '4h': 144e5, '60m': 36e5, '1d': 864e5, '1w': 6048e5, '1wk': 6048e5, '1M': 2592e6, '1mo': 2592e6 };
-const bnBase = ['https://api.binance.com', 'https://data-api.binance.vision'];
+// bn = Binance spot (crypto), bf = Binance USDT futures (gold XAUUSDT, silver XAGUSDT)
+const BIN = {
+  bn: { rest: ['https://api.binance.com', 'https://data-api.binance.vision'], k: '/api/v3/klines', t24: '/api/v3/ticker/24hr', ws: ['wss://stream.binance.com:9443', 'wss://data-stream.binance.vision'] },
+  bf: { rest: ['https://fapi.binance.com'], k: '/fapi/v1/klines', t24: '/fapi/v1/ticker/24hr', ws: ['wss://fstream.binance.com'] }
+};
+const bnBase = BIN.bn.rest;
+const wsIdx = { bn: 0, bf: 0 };
 // live socket hosts: main one first, public market-data mirror if it is blocked in a region
-const BN_WS = ['wss://stream.binance.com:9443', 'wss://data-stream.binance.vision'];
-let bnWsIdx = 0;
-function bnSocket(path) {
-  const ws = new WebSocket(BN_WS[bnWsIdx] + path); let opened = false;
+function bnSocket(path, m) {
+  m = m || 'bn'; const hosts = BIN[m].ws;
+  const ws = new WebSocket(hosts[wsIdx[m] % hosts.length] + path); let opened = false;
   ws.addEventListener('open', () => { opened = true; });
-  ws.addEventListener('close', () => { if (!opened) bnWsIdx = (bnWsIdx + 1) % BN_WS.length; });
+  ws.addEventListener('close', () => { if (!opened) wsIdx[m] = (wsIdx[m] + 1) % hosts.length; });
   return ws;
 }
 
@@ -275,17 +287,18 @@ function aggregate(list, n, ms, off) {
   });
   return out;
 }
-async function bnGet(path) {
+async function bnGet(path, m) {
   let err;
-  for (const b of bnBase) { try { return await getJSON(b + path); } catch (e) { err = e; } }
+  for (const b of BIN[m || 'bn'].rest) { try { return await getJSON(b + path); } catch (e) { err = e; } }
   throw err;
 }
 const bnRow = k => ({ timestamp: k[0], open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] });
-async function bnKlines(sym, iv, limit, endTime) {
-  return (await bnGet(`/api/v3/klines?symbol=${sym}&interval=${iv}&limit=${limit || 1000}${endTime ? '&endTime=' + endTime : ''}`)).map(bnRow);
+async function bnKlines(sym, iv, limit, endTime, m) {
+  m = m || 'bn';
+  return (await bnGet(`${BIN[m].k}?symbol=${sym}&interval=${iv}&limit=${Math.min(limit || 1000, m === 'bf' ? 1500 : 1000)}${endTime ? '&endTime=' + endTime : ''}`, m)).map(bnRow);
 }
 async function yfChart(sym, interval, range, extra) {
-  const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${interval}&range=${range}&includePrePost=false${extra || ''}`;
+  const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${interval}${range ? '&range=' + range : ''}&includePrePost=false${extra || ''}`;
   let j;
   try { j = await getJSON(u); } catch (e) { if (e.message === 'LOGIN_NEEDED') throw e; j = await getJSON(u.replace('query1', 'query2')); }
   const r = j.chart && j.chart.result && j.chart.result[0];
@@ -303,11 +316,12 @@ async function yfChart(sym, interval, range, extra) {
 /** History for a symbol + interval. */
 async function loadHistory(sym, tfk, endTime) {
   const t = tfObj(tfk);
-  if (sym.src === 'bn') {
-    const [iv, n] = t.bn, bms = BASE_MS[iv];
-    let list = await bnKlines(sym.s, iv, 1000, endTime);
+  if (isBin(sym)) {
+    const [iv, n] = t.bn, m = sym.src;
+    if (m === 'bf' && iv === '1s') throw new Error('Seconds charts are only for crypto');
+    let list = await bnKlines(sym.s, iv, 1000, endTime, m);
     if (n > 1 && iv === '1s') { // more 1s pages for second charts
-      for (let p = 0; p < Math.min(3, n) && list.length; p++) { const more = await bnKlines(sym.s, iv, 1000, list[0].timestamp - 1); list = more.concat(list); }
+      for (let p = 0; p < Math.min(3, n) && list.length; p++) { const more = await bnKlines(sym.s, iv, 1000, list[0].timestamp - 1, m); list = more.concat(list); }
     }
     return { list: aggregate(list, n, t.ms, 0), meta: {}, base: list.slice(-n * 2) };
   }
@@ -318,10 +332,10 @@ async function loadHistory(sym, tfk, endTime) {
 }
 
 /* ---------- quotes (watchlist prices) ---------- */
-const Quotes = { data: {}, subs: new Set(), ws: null, wsSyms: '' };
+const Quotes = { data: {}, ws: {}, wsSyms: {} };
 function quote(sym) { return Quotes.data[symKey(sym)]; }
 function marketState(sym, m) {
-  if (sym.src === 'bn') return 'open';
+  if (isBin(sym)) return 'open';
   const q = m || {}, now = Date.now() / 1000, p = q.currentTradingPeriod && q.currentTradingPeriod.regular;
   if (!p) return 'closed';
   if (now < p.start || now > p.end) return 'closed';
@@ -329,18 +343,22 @@ function marketState(sym, m) {
   return 'open';
 }
 async function refreshQuotes(list) {
-  const bn = list.filter(s => s.src === 'bn'), yf = list.filter(s => s.src === 'yf');
+  const bn = list.filter(s => s.src === 'bn'), bf = list.filter(s => s.src === 'bf'), yf = list.filter(s => s.src === 'yf');
+  await Promise.all(bf.map(async s => {
+    try { const t = await bnGet(BIN.bf.t24 + '?symbol=' + s.s, 'bf'); Quotes.data['bf:' + s.s] = { p: +t.lastPrice, pc: +t.lastPrice - +t.priceChange, ch: +t.priceChange, chp: +t.priceChangePercent, h: +t.highPrice, l: +t.lowPrice, v: +t.volume, st: 'open', t: Date.now() }; } catch (e) { }
+  }));
+  if (bf.length) liveTickers(bf, 'bf');
   if (bn.length) {
     try {
       const j = await bnGet('/api/v3/ticker/24hr?symbols=' + encodeURIComponent(JSON.stringify(bn.map(s => s.s))));
       j.forEach(t => { Quotes.data['bn:' + t.symbol] = { p: +t.lastPrice, pc: +t.prevClosePrice || (+t.lastPrice - +t.priceChange), ch: +t.priceChange, chp: +t.priceChangePercent, h: +t.highPrice, l: +t.lowPrice, v: +t.volume, st: 'open', t: Date.now() }; });
     } catch (e) { }
-    liveTickers(bn);
+    liveTickers(bn, 'bn');
   }
   for (let i = 0; i < yf.length; i += 4) {
     await Promise.all(yf.slice(i, i + 4).map(async s => {
       try {
-        const r = await yfChart(s.s, '1m', '1d');
+        const r = await yfChart(s.s, '1d', '1d');
         const m = r.meta, p = m.regularMarketPrice, pc = m.chartPreviousClose || m.previousClose;
         Quotes.data[symKey(s)] = { p, pc, ch: p - pc, chp: (p - pc) / pc * 100, h: m.regularMarketDayHigh, l: m.regularMarketDayLow, v: m.regularMarketVolume, st: marketState(s, m), t: (m.regularMarketTime || 0) * 1000, meta: m };
       } catch (e) { if (e.message === 'LOGIN_NEEDED') Quotes.needLogin = true; }
@@ -348,22 +366,23 @@ async function refreshQuotes(list) {
   }
   document.dispatchEvent(new Event('quotes'));
 }
-function liveTickers(bn) {
-  const key = bn.map(s => s.s).sort().join(',');
-  if (Quotes.ws && Quotes.wsSyms === key && Quotes.ws.readyState <= 1) return;
-  try { Quotes.ws && Quotes.ws.close(); } catch (e) { }
-  Quotes.wsSyms = key;
-  const ws = bnSocket('/stream?streams=' + bn.map(s => s.s.toLowerCase() + '@miniTicker').join('/'));
+function liveTickers(list, m) {
+  m = m || 'bn'; Quotes.ws = Quotes.ws || {}; Quotes.wsSyms = Quotes.wsSyms || {};
+  const key = list.map(s => s.s).sort().join(','), cur = Quotes.ws[m];
+  if (cur && Quotes.wsSyms[m] === key && cur.readyState <= 1) return;
+  try { cur && cur.close(); } catch (e) { }
+  Quotes.wsSyms[m] = key;
+  const ws = bnSocket('/stream?streams=' + list.map(s => s.s.toLowerCase() + '@miniTicker').join('/'), m);
   ws.onmessage = ev => {
     const t = JSON.parse(ev.data).data; if (!t) return;
-    const q = Quotes.data['bn:' + t.s] || {}; const p = +t.c, o = +t.o;
+    const k = m + ':' + t.s, q = Quotes.data[k] || {}; const p = +t.c, o = +t.o;
     Object.assign(q, { p, h: +t.h, l: +t.l, v: +t.v, st: 'open', t: t.E });
     if (!q.pc) q.pc = o; q.ch = p - q.pc; q.chp = q.ch / q.pc * 100;
-    Quotes.data['bn:' + t.s] = q;
+    Quotes.data[k] = q;
     clearTimeout(Quotes._ev); Quotes._ev = setTimeout(() => document.dispatchEvent(new Event('quotes')), 250);
   };
-  ws.onclose = () => { setTimeout(() => { if (Quotes.ws === ws) { Quotes.wsSyms = ''; liveTickers(bn); } }, 4000); };
-  Quotes.ws = ws;
+  ws.onclose = () => { setTimeout(() => { if (Quotes.ws[m] === ws) { Quotes.wsSyms[m] = ''; liveTickers(list, m); } }, 4000); };
+  Quotes.ws[m] = ws;
 }
 
 /* ---------- alerts (the phone app rings them even when closed) ---------- */

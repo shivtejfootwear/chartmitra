@@ -13,13 +13,14 @@ const { chromium } = require('playwright');
     const u = r.request().url();
     if (u.startsWith('file:')) return r.continue();
     if (u.includes('/klines')) return r.fulfill({ body: JSON.stringify(kl), contentType: 'application/json' });
+    if (u.includes('ticker/24hr') && u.includes('symbol=')) return r.fulfill({ body: JSON.stringify({ symbol: 'XAUUSDT', lastPrice: px.toFixed(2), priceChange: '10', priceChangePercent: '0.2', highPrice: '4100', lowPrice: '3900', volume: '10' }), contentType: 'application/json' });
     if (u.includes('ticker/24hr')) return r.fulfill({ body: JSON.stringify([{ symbol: 'PAXGUSDT', lastPrice: px.toFixed(2), prevClosePrice: '3990', priceChange: '10', priceChangePercent: '0.2', highPrice: '4100', lowPrice: '3900', volume: '10', quoteVolume: '30000000' }]), contentType: 'application/json' });
     return r.fulfill({ status: 500, body: 'offline' });
   });
   await p.goto('file://' + process.cwd() + '/site/index.html');
   await p.waitForTimeout(2500);
   const res = await p.evaluate(async () => {
-    const out = {};
+    const out = { sym: C.sym && C.sym.s + ':' + C.sym.src };
     const err = (k, e) => { out[k] = 'ERR ' + (e && e.message || e); };
     try { out.dataLen = C.chart.getDataList().length; out.listLen = C.list.length; } catch (e) { err('data', e); }
     // live updates must reach the chart

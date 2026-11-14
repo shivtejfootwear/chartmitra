@@ -30,6 +30,9 @@ public class Http {
 
     /** Latest price for a symbol. src = "bn" (Binance crypto) or "yf" (Yahoo: NSE/BSE/gold). */
     public static double price(String src, String sym) throws Exception {
+        if ("bf".equals(src)) { // Binance futures: gold XAUUSDT, silver XAGUSDT
+            return new org.json.JSONObject(get("https://fapi.binance.com/fapi/v1/ticker/price?symbol=" + sym)).getDouble("price");
+        }
         if ("bn".equals(src)) {
             String body;
             try {

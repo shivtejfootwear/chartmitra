@@ -270,13 +270,13 @@ function initChart() {
 }
 async function onLoadMore(params) {
   const cb = params.callback || ((l, m) => C.chart.applyMoreData(l, m));
-  if (C.replay || !C.sym || C.sym.src !== 'bn' || !C.list.length || C.moreBusy) return;
+  if (C.replay || !isBin(C.sym) || !C.list.length || C.moreBusy) return;
   const my = C.seq;
   C.moreBusy = true;
   try {
     const t = tfObj(C.tf), [iv, n] = t.bn;
     if (iv === '1s') return cb([], false);
-    let more = aggregate(await bnKlines(C.sym.s, iv, 1000, C.list[0].timestamp - 1), n, t.ms, 0);
+    let more = aggregate(await bnKlines(C.sym.s, iv, 1000, C.list[0].timestamp - 1, C.sym.src), n, t.ms, 0);
     if (my !== C.seq || C.replay) return; // symbol or interval changed meanwhile: drop it
     more = more.filter(k => k.timestamp < C.list[0].timestamp);
     C.list = more.concat(C.list); shiftDrawIdx(more.length);
@@ -317,8 +317,8 @@ async function loadData() {
     C._agg = { b: lb, parts: {} };
     (base || []).filter(k => bucketOf(k.timestamp, t.ms, sessionOffset(C.sym)) === lb).forEach(k => C._agg.parts[k.timestamp] = Object.assign({}, k));
     const d = decimals(list[list.length - 1].close);
-    C.chart.setPriceVolumePrecision(d, C.sym.src === 'bn' ? 2 : 0);
-    C.chart.applyNewData(viewData(list), C.sym.src === 'bn');
+    C.chart.setPriceVolumePrecision(d, isBin(C.sym) ? 2 : 0);
+    C.chart.applyNewData(viewData(list), isBin(C.sym));
     hideMsg(); sizePanes();
     restoreDrawings(); drawAlertLines(); drawEvents(); refreshCompare();
     startLive(my);
@@ -332,7 +332,7 @@ async function loadData() {
 function stopLive() { C.live = false; try { C.ws && C.ws.close(); } catch (e) { } C.ws = null; clearInterval(C.poll); C.poll = null; }
 
 /** Merge a fresh base candle into the chart (handles merged intervals like 10m, 45m, 4h). */
-function aggN() { const t = tfObj(C.tf); return C.sym.src === 'bn' ? t.bn[1] : t.yf[1]; }
+function aggN() { const t = tfObj(C.tf); return isBin(C.sym) ? t.bn[1] : t.yf[1]; }
 function combine(parts, b) { return { timestamp: b, open: parts[0].open, high: Math.max(...parts.map(p => p.high)), low: Math.min(...parts.map(p => p.low)), close: parts[parts.length - 1].close, volume: parts.reduce((s, p) => s + (p.volume || 0), 0) }; }
 let drawPend = null, drawT = null;
 function drawNow() {
@@ -370,9 +370,9 @@ function pushPrice(p) {
 function startLive(my) {
   C.live = true; C.lastTick = Date.now();
   const t = tfObj(C.tf);
-  if (C.sym.src === 'bn') {
-    const s = C.sym.s.toLowerCase(), iv = t.bn[0];
-    const ws = bnSocket(`/stream?streams=${s}@kline_${iv}/${s}@aggTrade`);
+  if (isBin(C.sym)) {
+    const s = C.sym.s.toLowerCase(), iv = t.bn[0], mk = C.sym.src;
+    const ws = bnSocket(`/stream?streams=${s}@kline_${iv}/${s}@aggTrade`, mk);
     ws.onmessage = ev => {
       if (my !== C.seq || C.replay) return;
       const m = JSON.parse(ev.data), d = m.data; if (!d) return;
@@ -386,14 +386,14 @@ function startLive(my) {
     };
     ws.onclose = () => { if (my === C.seq && C.live && !C.replay) setTimeout(() => { if (my !== C.seq || !C.live) return;
       if (Date.now() - (C.lastTick || 0) > t.ms * 3) { loadData(); return; } // long gap (phone slept): reload everything
-      bnKlines(C.sym.s, iv, 5).then(l => l.forEach(pushBase)).catch(() => { }); startLive(my); }, 2000); };
+      bnKlines(C.sym.s, iv, 5, null, mk).then(l => l.forEach(pushBase)).catch(() => { }); startLive(my); }, 2000); };
     C.ws = ws;
   } else {
-    const [iv] = t.yf, rng = ['1m', '2m', '5m', '15m', '30m'].includes(iv) ? '1d' : iv === '60m' ? '5d' : iv === '1d' ? '5d' : iv === '1wk' ? '1mo' : '1y';
+    const [iv] = t.yf, win = Math.max(t.ms * 3, BASE_MS[iv] * 12, iv === '1d' || iv === '1wk' || iv === '1mo' ? 864e5 * 10 : 0);
     const tick = async () => {
-      if (my !== C.seq || C.replay) return;
+      if (my !== C.seq || C.replay || document.hidden) return;
       try {
-        const r = await yfChart(C.sym.s, iv, rng);
+        const now = Date.now(), r = await yfChart(C.sym.s, iv, null, `&period1=${Math.floor((now - win) / 1000)}&period2=${Math.floor(now / 1000) + 120}`);
         if (my !== C.seq) return;
         C.meta = r.meta;
         const lastTs = C.list.length ? C.list[C.list.length - 1].timestamp : 0;
@@ -417,7 +417,7 @@ function updateLegend() {
   $('#lgIcon').outerHTML = symIcon(C.sym).replace('class="sicon"', 'class="sicon" id="lgIcon"');
   $('#lgName').textContent = C.sym.d || C.sym.n;
   const last = C.list[C.list.length - 1], q = quote(C.sym) || {};
-  let st = C.sym.src === 'bn' ? 'open' : marketState(C.sym, C.meta);
+  let st = isBin(C.sym) ? 'open' : marketState(C.sym, C.meta);
   if (C.replay) st = 'closed';
   const ms = $('#lgState'); ms.className = 'mstate ' + (st === 'open' ? '' : st); ms.title = C.replay ? 'Replay' : st === 'open' ? 'Market open · live' : st === 'delay' ? 'Data may be delayed' : 'Market closed';
   if (!last) { $('#lgPx').textContent = ''; return; }
@@ -456,7 +456,7 @@ function tickCountdown() {
   if (!last || el.classList.contains('hide')) return;
   const t = tfObj(C.tf), end = last.timestamp + t.ms, left = Math.max(0, end - Date.now()), s = Math.floor(left / 1000);
   const hh = Math.floor(s / 3600), mm = Math.floor(s % 3600 / 60), ss = s % 60;
-  const closed = C.sym.src !== 'bn' && marketState(C.sym, C.meta) !== 'open';
+  const closed = !isBin(C.sym) && marketState(C.sym, C.meta) !== 'open';
   el.innerHTML = `${fmt(last.close, decimals(last.close))}<small>${closed ? 'Closed' : (hh ? hh + ':' : '') + String(mm).padStart(2, '0') + ':' + String(ss).padStart(2, '0')}</small>`;
 }
 function showMsg(h) { const m = $('#cMsg'); m.innerHTML = h; m.classList.remove('hide'); }
@@ -608,8 +608,8 @@ async function refreshCompare() {
 async function startReplay(fromTs) {
   stopLive();
   const t = tfObj(C.tf); let all = C.list.slice();
-  if (C.sym.src === 'bn' && fromTs && fromTs < all[0].timestamp) {
-    try { all = aggregate(await bnKlines(C.sym.s, t.bn[0], 1000, fromTs + 700 * BASE_MS[t.bn[0]] * t.bn[1]), t.bn[1], t.ms, 0); } catch (e) { toast('Could not load that date'); }
+  if (isBin(C.sym) && fromTs && fromTs < all[0].timestamp) {
+    try { all = aggregate(await bnKlines(C.sym.s, t.bn[0], 1000, fromTs + 700 * BASE_MS[t.bn[0]] * t.bn[1], C.sym.src), t.bn[1], t.ms, 0); } catch (e) { toast('Could not load that date'); }
   }
   let idx = fromTs ? all.findIndex(k => k.timestamp >= fromTs) : Math.max(30, all.length - 150);
   if (idx < 0) idx = all.length - 1; idx = Math.max(10, idx);
@@ -697,10 +697,10 @@ function selfHeal() {
   try {
     const dl = C.chart.getDataList(), a = dl[dl.length - 1], b = C.list[C.list.length - 1];
     if (!a || a.timestamp !== b.timestamp || (settings().chartType !== 'heikin' && a.close !== b.close && !drawT)) {
-      C.chart.applyNewData(viewData(C.list), C.sym.src === 'bn'); restoreDrawings(); drawAlertLines();
+      C.chart.applyNewData(viewData(C.list), isBin(C.sym)); restoreDrawings(); drawAlertLines();
     }
     // crypto runs 24/7: if the newest candle is far behind the clock, reload
-    if (C.sym.src === 'bn' && Date.now() - b.timestamp > tfObj(C.tf).ms * 3 + 60000) loadData();
+    if (isBin(C.sym) && Date.now() - b.timestamp > tfObj(C.tf).ms * 3 + 60000) loadData();
   } catch (e) { }
 }
 

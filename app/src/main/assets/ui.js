@@ -265,7 +265,7 @@ const UI = {
     const types = [['candle_solid', 'Candles', 'candle'], ['candle_stroke', 'Hollow candles', 'candle'], ['heikin', 'Heikin Ashi', 'candle'], ['ohlc', 'Bars', 'ind'], ['line', 'Line', 'chart'], ['area', 'Area', 'chart']];
     const cur = settings().chartType;
     this.open(`<h2>Chart type</h2><div class="tiles t3">${types.map(t => `<div class="tile ${t[0] === cur ? 'on' : 'f'}" data-t="${t[0]}">${icon(t[2])}${t[1]}</div>`).join('')}</div>`, root => {
-      root.onclick = e => { const t = e.target.closest('[data-t]'); if (!t) return; setSetting('chartType', t.dataset.t); applyTheme(); C.chart.applyNewData(viewData(C.list), C.sym.src === 'bn'); restoreDrawings(); drawAlertLines(); this.close(); };
+      root.onclick = e => { const t = e.target.closest('[data-t]'); if (!t) return; setSetting('chartType', t.dataset.t); applyTheme(); C.chart.applyNewData(viewData(C.list), isBin(C.sym)); restoreDrawings(); drawAlertLines(); this.close(); };
     });
   },
   objectTree() {
@@ -291,12 +291,12 @@ const UI = {
   },
   details() {
     const q = quote(C.sym) || {}, m = C.meta || {}, last = C.list[C.list.length - 1] || {};
-    const src = C.sym.src === 'bn' ? 'Binance (real-time WebSocket, tick by tick)' : 'Yahoo Finance (refreshed every 2–3 s; NSE/BSE can lag the exchange)';
+    const src = C.sym.src === 'bf' ? 'Binance ' + esc(C.sym.s) + ' contract (real-time, tracks the spot price, 24/7)' : C.sym.src === 'bn' ? 'Binance (real-time WebSocket, tick by tick)' : 'Yahoo Finance (refreshed every 2–3 s; NSE/BSE can lag the exchange)';
     const row = (a, b) => `<div class="irow"><div class="n">${a}</div><b style="font-weight:500">${b}</b></div>`;
     this.open(`<h2>${esc(C.sym.n)}</h2><div class="hint" style="margin:-8px 18px 8px;font-size:14px">${esc(C.sym.d)}</div>
       ${row('Exchange', esc(C.sym.x))}${row('Currency', esc(C.sym.cur || m.currency || '—'))}${row('Last', fmt(last.close))}${row('Day high', fmt(q.h || m.regularMarketDayHigh))}${row('Day low', fmt(q.l || m.regularMarketDayLow))}
       ${row('Previous close', fmt(q.pc || m.chartPreviousClose))}${row('Volume', fmtVol(q.v || m.regularMarketVolume || 0))}${m.fiftyTwoWeekHigh ? row('52W high', fmt(m.fiftyTwoWeekHigh)) + row('52W low', fmt(m.fiftyTwoWeekLow)) : ''}
-      ${row('Exchange time zone', esc(m.exchangeTimezoneName || (C.sym.src === 'bn' ? 'UTC (24/7)' : '—')))}<div class="hint" style="font-size:13px;margin-top:12px">Data source: ${src}</div>`);
+      ${row('Exchange time zone', esc(m.exchangeTimezoneName || (isBin(C.sym) ? 'UTC (24/7)' : '—')))}<div class="hint" style="font-size:13px;margin-top:12px">Data source: ${src}</div>`);
   },
   tech() {
     const t = technicals(); if (!t) return this.open('<h2>Technicals</h2><div class="empty">Need at least 50 candles</div>');
@@ -539,6 +539,18 @@ function calcSheet() {
   });
 }
 
+/* ---------- XAUUSD moved from the PAXG token to the real gold contract ---------- */
+function migrateGold() {
+  const old = x => x && x.s === 'PAXGUSDT' && x.n === 'XAUUSD';
+  const W = Store.get('wls', null); let ch = false;
+  if (W) W.forEach(w => w.groups.forEach(g => g.items.forEach((it, i) => { if (old(it)) { g.items[i] = Object.assign({}, XAU_SYM); ch = true; } })));
+  if (W && !W.some(w => w.groups.some(g => g.items.some(i => i.s === 'XAGUSDT')))) { const g = W[0].groups.find(x => /gold/i.test(x.name)); if (g) { g.items.splice(1, 0, Object.assign({}, XAG_SYM)); ch = true; } }
+  if (ch) Store.set('wls', W);
+  const last = Store.get('last', null); if (last && old(last.sym)) { last.sym = Object.assign({}, XAU_SYM); Store.set('last', last, true); }
+  const d = Store.get('drw:bn:PAXGUSDT', null); if (d && d.length && !Store.get('drw:bf:XAUUSDT', null)) Store.set('drw:bf:XAUUSDT', d);
+  const al = Alerts.list(); let ac = false; al.forEach(a => { if (a.sym === 'PAXGUSDT' && a.name === 'XAUUSD') { a.sym = 'XAUUSDT'; a.src = 'bf'; ac = true; } }); if (ac) Alerts.save(al);
+}
+
 /* ---------- wiring + startup ---------- */
 function wheelSwipe(el, cb) { let y0 = null; el.addEventListener('touchstart', e => y0 = e.touches[0].clientY, { passive: true }); el.addEventListener('touchend', e => { if (y0 == null) return; const d = e.changedTouches[0].clientY - y0; y0 = null; if (Math.abs(d) > 24) { el._sw = true; cb(d < 0 ? 1 : -1); } }); el.addEventListener('wheel', e => { e.preventDefault(); cb(e.deltaY > 0 ? 1 : -1); }, { passive: false }); }
 window.onBack = () => {
@@ -582,6 +594,7 @@ document.addEventListener('quotes', () => { if (UI.cur === 'watch') renderWatch(
   document.addEventListener('keydown', e => { if (e.key === 'Escape') window.onBack(); if ((e.ctrlKey || e.metaKey) && e.key === 'z') undoDraw(); if (UI.cur === 'chart' && C.replay && e.key === 'ArrowRight') replayStep(1); if (UI.cur === 'chart' && C.replay && e.key === 'ArrowLeft') replayStep(-1); });
 
   if (typeof klinecharts === 'undefined') { showMsg('Chart library missing. Please reinstall the app.'); return; }
+  migrateGold();
   initChart(); renderFavbar();
   window.addEventListener('resize', renderFavbar);
   await Sync.pull(); await Alerts.refresh();
@@ -590,6 +603,7 @@ document.addEventListener('quotes', () => { if (UI.cur === 'watch') renderWatch(
   C.tf = (last && last.tf) || '15m';
   await openSymbol(first, C.tf);
   refreshQuotes(allSymbols());
-  setInterval(() => { if (!document.hidden) refreshQuotes(allSymbols().filter(s => s.src === 'yf')); }, 8000);
+  // Yahoo prices: whole list only while you look at it, otherwise just the open chart (keeps the phone light)
+  setInterval(() => { if (document.hidden) return; const all = allSymbols().filter(s => s.src === 'yf'); refreshQuotes(['watch', 'explore'].includes(UI.cur) ? all : all.filter(s => C.sym && symKey(s) === symKey(C.sym))); }, 8000);
   setInterval(() => { if (!document.hidden) Sync.pull().then(ch => { if (ch && ch.some(k => k === drawKey())) restoreDrawings(); }); }, 60000);
 })();
