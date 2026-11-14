@@ -8,6 +8,7 @@ const C = {
 };
 const UP = () => settings().upColor, DN = () => settings().downColor;
 
+const FONT = 'Roboto, -apple-system, "Segoe UI", Arial, sans-serif';
 function themeStyles() {
   const dark = settings().theme === 'dark', g = dark ? '#1e222d' : '#f3f4f7', tx = dark ? '#b2b5be' : '#131722', ln = dark ? '#2a2e39' : '#e0e3eb';
   const s = settings();
@@ -17,21 +18,21 @@ function themeStyles() {
       type: s.chartType === 'heikin' ? 'candle_solid' : s.chartType === 'line' ? 'area' : s.chartType,
       bar: { upColor: UP(), downColor: DN(), noChangeColor: '#787b86', upBorderColor: UP(), downBorderColor: DN(), noChangeBorderColor: '#787b86', upWickColor: UP(), downWickColor: DN(), noChangeWickColor: '#787b86' },
       area: { lineSize: 1.5, lineColor: '#2962ff', value: 'close', backgroundColor: s.chartType === 'line' ? [{ offset: 0, color: 'rgba(41,98,255,0)' }, { offset: 1, color: 'rgba(41,98,255,0)' }] : [{ offset: 0, color: 'rgba(41,98,255,0.01)' }, { offset: 1, color: 'rgba(41,98,255,0.18)' }] },
-      priceMark: { high: { color: tx, textSize: 10 }, low: { color: tx, textSize: 10 }, last: { upColor: UP(), downColor: DN(), noChangeColor: '#787b86', line: { show: true, style: 'dashed', dashedValue: [1, 3], size: 1 }, text: { size: 11, paddingLeft: 5, paddingRight: 5, paddingTop: 3, paddingBottom: 3, borderRadius: 2 } } },
-      tooltip: { showRule: 'always', showType: 'standard', offsetTop: 50, offsetLeft: 8, text: { size: 11, color: tx, marginLeft: 0, marginRight: 8 },
+      priceMark: { high: { color: tx, textSize: 10, textFamily: FONT }, low: { color: tx, textSize: 10, textFamily: FONT }, last: { upColor: UP(), downColor: DN(), noChangeColor: '#787b86', line: { show: true, style: 'dashed', dashedValue: [1, 3], size: 1 }, text: { size: 11, family: FONT, paddingLeft: 5, paddingRight: 5, paddingTop: 3, paddingBottom: 3, borderRadius: 2 } } },
+      tooltip: { showRule: 'always', showType: 'standard', offsetTop: 50, offsetLeft: 8, text: { size: 11, color: tx, family: FONT, marginLeft: 0, marginRight: 8 },
         custom: d => { const k = d.current; if (!k) return []; const c = k.close >= k.open ? UP() : DN(), dd = decimals(k.close);
           return [['O', k.open], ['H', k.high], ['L', k.low], ['C', k.close]].map(([t, v]) => ({ title: t + ' ', value: { text: fmt(v, dd), color: c } })).concat([{ title: 'Vol ', value: { text: fmtVol(k.volume || 0), color: tx } }]); } }
     },
-    indicator: { lastValueMark: { show: false }, tooltip: { showRule: 'always', showType: 'standard', offsetTop: 12, text: { size: 11, color: tx },
+    indicator: { lastValueMark: { show: false }, tooltip: { showRule: 'always', showType: 'standard', offsetTop: 12, text: { size: 11, color: tx, family: FONT },
       icons: [['cm_vis', '◉'], ['cm_set', '⚙'], ['cm_del', '✕']].map(([id, icon]) => ({ id, icon, position: 'middle', fontFamily: 'sans-serif', size: 14, color: dark ? '#b2b5be' : '#787b86', activeColor: '#2962ff', backgroundColor: 'transparent', activeBackgroundColor: 'rgba(41,98,255,0.12)', marginLeft: 6, marginTop: 0, marginRight: 0, marginBottom: 0, paddingLeft: 4, paddingTop: 2, paddingRight: 4, paddingBottom: 2 })) } },
-    xAxis: { axisLine: { color: ln }, tickLine: { show: false }, tickText: { color: tx, size: 11 } },
-    yAxis: { type: s.log ? 'log' : s.pct ? 'percentage' : 'normal', axisLine: { color: ln }, tickLine: { show: false }, tickText: { color: tx, size: 11 } },
+    xAxis: { axisLine: { color: ln }, tickLine: { show: false }, tickText: { color: tx, size: 11, family: FONT } },
+    yAxis: { type: s.log ? 'log' : s.pct ? 'percentage' : 'normal', axisLine: { color: ln }, tickLine: { show: false }, tickText: { color: tx, size: 11, family: FONT } },
     separator: { color: ln, size: 1 },
-    crosshair: { horizontal: { line: { color: '#9598a1', style: 'dashed', dashedValue: [4, 3], size: 1 }, text: { backgroundColor: '#131722', borderColor: '#131722', size: 11 } }, vertical: { line: { color: '#9598a1', style: 'dashed', dashedValue: [4, 3], size: 1 }, text: { backgroundColor: '#131722', borderColor: '#131722', size: 11 } } },
+    crosshair: { horizontal: { line: { color: '#9598a1', style: 'dashed', dashedValue: [4, 3], size: 1 }, text: { backgroundColor: '#131722', borderColor: '#131722', size: 11, family: FONT } }, vertical: { line: { color: '#9598a1', style: 'dashed', dashedValue: [4, 3], size: 1 }, text: { backgroundColor: '#131722', borderColor: '#131722', size: 11, family: FONT } } },
     overlay: {
       point: { color: '#2962ff', borderColor: 'rgba(41,98,255,0.3)', borderSize: 1, radius: 4, activeColor: '#2962ff', activeBorderColor: 'rgba(41,98,255,0.3)', activeBorderSize: 3, activeRadius: 4 },
       line: { color: '#2962ff', size: 1 }, polygon: { color: 'rgba(41,98,255,0.12)', borderColor: '#2962ff', borderSize: 1 }, rect: { color: 'rgba(41,98,255,0.12)', borderColor: '#2962ff', borderSize: 1 },
-      text: { color: '#2962ff', size: 12 }, rectText: { color: '#fff', backgroundColor: '#2962ff', size: 11, borderRadius: 3 }
+      text: { color: '#2962ff', size: 12, family: FONT }, rectText: { color: '#fff', backgroundColor: '#2962ff', size: 11, family: FONT, borderRadius: 3 }
     }
   };
 }
@@ -40,7 +41,7 @@ function themeStyles() {
 const FIB_LV = [[0, '#787b86'], [0.236, '#f23645'], [0.382, '#ff9800'], [0.5, '#4caf50'], [0.618, '#089981'], [0.786, '#00bcd4'], [1, '#787b86'], [1.618, '#2962ff'], [2.618, '#f23645']];
 const st = (o, k, d) => (o.styles && o.styles[k]) || d;
 const lineStyle = o => Object.assign({ style: 'solid', size: 1, color: '#2962ff', dashedValue: [4, 4] }, st(o, 'line', {}));
-const txt = (x, y, text, color, align, baseline, bg) => ({ type: 'text', ignoreEvent: true, attrs: { x, y, text, align: align || 'left', baseline: baseline || 'bottom' }, styles: { color: bg ? '#fff' : color, size: 11, backgroundColor: bg || 'transparent', borderRadius: 3, paddingLeft: bg ? 5 : 0, paddingRight: bg ? 5 : 0, paddingTop: bg ? 3 : 0, paddingBottom: bg ? 3 : 0, borderSize: 0 } });
+const txt = (x, y, text, color, align, baseline, bg) => ({ type: 'text', ignoreEvent: true, attrs: { x, y, text, align: align || 'left', baseline: baseline || 'bottom' }, styles: { color: bg ? '#fff' : color, size: 11, family: FONT, backgroundColor: bg || 'transparent', borderRadius: 3, paddingLeft: bg ? 5 : 0, paddingRight: bg ? 5 : 0, paddingTop: bg ? 3 : 0, paddingBottom: bg ? 3 : 0, borderSize: 0 } });
 const pct = (a, b) => ((b - a) / a * 100);
 function ptTs(p) { return p.timestamp != null ? p.timestamp : idxToTs(p.dataIndex); }
 function registerTools() {
@@ -264,7 +265,7 @@ function initChart() {
   C.chart.subscribeAction('onTooltipIconClick', d => { try { indicatorIcon(d); } catch (e) { } });
   setupGestures();
   setInterval(selfHeal, 5000);
-  const cfg = Store.get('ind', null) || [{ n: 'VOL' }, { n: 'STOCHRSI' }, { n: 'RSI' }];
+  const cfg = Store.get('ind', null) || [{ n: 'STOCHRSI' }, { n: 'RSI' }];
   cfg.forEach(c => addIndicator(c.n, c.p, true, c.h));
 }
 async function onLoadMore(params) {
