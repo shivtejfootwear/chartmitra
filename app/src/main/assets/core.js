@@ -265,6 +265,8 @@ const BIN = {
   bf: { rest: ['https://fapi.binance.com'], k: '/fapi/v1/klines', t24: '/fapi/v1/ticker/24hr', ws: ['wss://fstream.binance.com'] }
 };
 const bnBase = BIN.bn.rest;
+// older history for Binance gold/silver futures (they start only at listing); COMEX future has decades of data
+const YF_OLD = { XAUUSDT: 'GC=F', XAGUSDT: 'SI=F' };
 const wsIdx = { bn: 0, bf: 0 };
 // live socket hosts: main one first, public market-data mirror if it is blocked in a region
 function bnSocket(path, m) {
@@ -322,6 +324,15 @@ async function loadHistory(sym, tfk, endTime) {
     let list = await bnKlines(sym.s, iv, 1000, endTime, m);
     if (n > 1 && iv === '1s') { // more 1s pages for second charts
       for (let p = 0; p < Math.min(3, n) && list.length; p++) { const more = await bnKlines(sym.s, iv, 1000, list[0].timestamp - 1, m); list = more.concat(list); }
+    }
+    // Binance gold/silver futures only go back to their listing; older history (daily and up) comes from the COMEX future
+    const old = YF_OLD[sym.s];
+    if (old && m === 'bf' && t.yf && !endTime && ['1D', '1W', '1M'].includes(tfk) && list.length) {
+      try {
+        const y = await yfChart(old, t.yf[0], t.yf[2]), first = list[0].timestamp;
+        const before = y.list.filter(k => k.timestamp < first);
+        if (before.length) list = before.concat(list);
+      } catch (e) { }
     }
     return { list: aggregate(list, n, t.ms, 0), meta: {}, base: list.slice(-n * 2) };
   }

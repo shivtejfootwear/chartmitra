@@ -300,6 +300,7 @@ const viewData = l => settings().chartType === 'heikin' ? heikin(l) : l.slice();
 async function openSymbol(sym, tf) {
   if (C.replay) stopReplay(true);
   C.sym = sym; if (tf) C.tf = tf;
+  C.listKey = null; // old symbol's candles must not show under the new name
   Store.set('last', { sym, tf: C.tf }, true);
   const t = tfObj(C.tf);
   if (t.cryptoOnly && sym.src !== 'bn') C.tf = '1m';
@@ -312,7 +313,7 @@ async function loadData() {
     const { list, meta, base } = await loadHistory(C.sym, C.tf);
     if (my !== C.seq) return;
     if (!list.length) throw new Error('No data for this interval');
-    C.list = list; C.meta = meta || {};
+    C.list = list; C.meta = meta || {}; C.listKey = symKey(C.sym);
     const lb = list[list.length - 1].timestamp, t = tfObj(C.tf);
     C._agg = { b: lb, parts: {} };
     (base || []).filter(k => bucketOf(k.timestamp, t.ms, sessionOffset(C.sym)) === lb).forEach(k => C._agg.parts[k.timestamp] = Object.assign({}, k));
@@ -417,6 +418,8 @@ function updateLegend() {
   $('#lgIcon').outerHTML = symIcon(C.sym).replace('class="sicon"', 'class="sicon" id="lgIcon"');
   $('#lgName').textContent = C.sym.d || C.sym.n;
   const last = C.list[C.list.length - 1], q = quote(C.sym) || {};
+  // the price line always shows the candles of the symbol on screen; while a new symbol loads, say so
+  if (C.listKey !== symKey(C.sym)) { $('#lgPx').textContent = 'Loading…'; $('#lgPx').className = 'l2'; return; }
   let st = isBin(C.sym) ? 'open' : marketState(C.sym, C.meta);
   if (C.replay) st = 'closed';
   const ms = $('#lgState'); ms.className = 'mstate ' + (st === 'open' ? '' : st); ms.title = C.replay ? 'Replay' : st === 'open' ? 'Market open · live' : st === 'delay' ? 'Data may be delayed' : 'Market closed';
@@ -453,7 +456,7 @@ function placeCountdown() {
 }
 function tickCountdown() {
   const el = $('#countdown'), last = C.list[C.list.length - 1];
-  if (!last || el.classList.contains('hide')) return;
+  if (!last || el.classList.contains('hide') || C.listKey !== symKey(C.sym)) return;
   const t = tfObj(C.tf), end = last.timestamp + t.ms, left = Math.max(0, end - Date.now()), s = Math.floor(left / 1000);
   const hh = Math.floor(s / 3600), mm = Math.floor(s % 3600 / 60), ss = s % 60;
   const closed = !isBin(C.sym) && marketState(C.sym, C.meta) !== 'open';
@@ -701,6 +704,8 @@ function selfHeal() {
     }
     // crypto runs 24/7: if the newest candle is far behind the clock, reload
     if (isBin(C.sym) && Date.now() - b.timestamp > tfObj(C.tf).ms * 3 + 60000) loadData();
+    // live socket silent for 20 s on a 24/7 market = stalled feed: reload so price and candles come back together
+    if (isBin(C.sym) && C.live && Date.now() - (C.lastTick || 0) > 20000) loadData();
   } catch (e) { }
 }
 
