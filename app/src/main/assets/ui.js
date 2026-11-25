@@ -547,6 +547,7 @@ function migrateGold() {
   let W = Store.get('wls', null), ch = false;
   if (W) {
     W.forEach(w => w.groups.forEach(g => {
+      if (!/gold/i.test(g.name)) { const k = symKey(XAU_SYM), n0 = g.items.length; g.items = g.items.filter(i => symKey(i) !== k); if (g.items.length !== n0) ch = true; } // gold lives in the gold group only
       const seen = new Set();
       g.items = g.items.map(it => { const m = mapIt(it); if (m !== it) ch = true; return m; }).filter(it => { const k = symKey(it); if (seen.has(k)) { ch = true; return false; } seen.add(k); return true; });
     }));

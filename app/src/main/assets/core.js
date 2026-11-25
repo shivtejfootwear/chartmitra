@@ -215,8 +215,7 @@ const DEFAULT_WL = [
     { s: 'ETHUSDT', n: 'ETHUSDT', d: 'Ethereum / TetherUS', x: 'Binance', src: 'bn', cat: 'crypto', cur: 'USDT' },
     { s: 'SOLUSDT', n: 'SOLUSDT', d: 'Solana / TetherUS', x: 'Binance', src: 'bn', cat: 'crypto', cur: 'USDT' },
     { s: 'BNBUSDT', n: 'BNBUSDT', d: 'BNB / TetherUS', x: 'Binance', src: 'bn', cat: 'crypto', cur: 'USDT' },
-    { s: 'XRPUSDT', n: 'XRPUSDT', d: 'XRP / TetherUS', x: 'Binance', src: 'bn', cat: 'crypto', cur: 'USDT' },
-    { s: 'PAXGUSDT', n: 'PAXGUSDT', d: 'PAX Gold token / TetherUS', x: 'Binance', src: 'bn', cat: 'crypto', cur: 'USDT' }] }
+    { s: 'XRPUSDT', n: 'XRPUSDT', d: 'XRP / TetherUS', x: 'Binance', src: 'bn', cat: 'crypto', cur: 'USDT' }] }
 ];
 const symKey = o => o.src + ':' + o.s;
 function watchlists() { return Store.get('wls', null) || [{ id: 'main', name: 'Watchlist', groups: DEFAULT_WL }]; }
