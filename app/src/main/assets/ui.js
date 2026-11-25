@@ -541,14 +541,24 @@ function calcSheet() {
 
 /* ---------- XAUUSD moved from the PAXG token to the real gold contract ---------- */
 function migrateGold() {
-  const old = x => x && x.s === 'PAXGUSDT' && x.n === 'XAUUSD';
-  const W = Store.get('wls', null); let ch = false;
-  if (W) W.forEach(w => w.groups.forEach(g => g.items.forEach((it, i) => { if (old(it)) { g.items[i] = Object.assign({}, XAU_SYM); ch = true; } })));
-  if (W && !W.some(w => w.groups.some(g => g.items.some(i => i.s === 'XAGUSDT')))) { const g = W[0].groups.find(x => /gold/i.test(x.name)); if (g) { g.items.splice(1, 0, Object.assign({}, XAG_SYM)); ch = true; } }
-  if (ch) Store.set('wls', W);
-  const last = Store.get('last', null); if (last && old(last.sym)) { last.sym = Object.assign({}, XAU_SYM); Store.set('last', last, true); }
-  const d = Store.get('drw:bn:PAXGUSDT', null); if (d && d.length && !Store.get('drw:bf:XAUUSDT', null)) Store.set('drw:bf:XAUUSDT', d);
-  const al = Alerts.list(); let ac = false; al.forEach(a => { if (a.sym === 'PAXGUSDT' && a.name === 'XAUUSD') { a.sym = 'XAUUSDT'; a.src = 'bf'; ac = true; } }); if (ac) Alerts.save(al);
+  // saved items on the old Binance futures feed move to the new gold (PAXG spot) and silver (COMEX future) sources
+  const FROM = { 'bf:XAUUSDT': XAU_SYM, 'bf:XAGUSDT': XAG_SYM };
+  const mapIt = it => { const n = it && FROM[symKey(it)]; return n ? Object.assign({}, n) : it; };
+  let W = Store.get('wls', null), ch = false;
+  if (W) {
+    W.forEach(w => w.groups.forEach(g => {
+      const seen = new Set();
+      g.items = g.items.map(it => { const m = mapIt(it); if (m !== it) ch = true; return m; }).filter(it => { const k = symKey(it); if (seen.has(k)) { ch = true; return false; } seen.add(k); return true; });
+    }));
+    if (!W.some(w => w.groups.some(g => g.items.some(i => symKey(i) === symKey(XAG_SYM))))) { const g = W[0].groups.find(x => /gold/i.test(x.name)); if (g) { g.items.splice(1, 0, Object.assign({}, XAG_SYM)); ch = true; } }
+    if (ch) Store.set('wls', W);
+  }
+  const last = Store.get('last', null); if (last && last.sym && FROM[symKey(last.sym)]) { last.sym = mapIt(last.sym); Store.set('last', last, true); }
+  // drawings follow their symbol
+  [['drw:bf:XAUUSDT', 'drw:bn:PAXGUSDT'], ['drw:bf:XAGUSDT', 'drw:yf:SI=F']].forEach(([from, to]) => { const d = Store.get(from, null); if (d && d.length && !Store.get(to, null)) Store.set(to, d); });
+  const al = Alerts.list(); let ac = false;
+  al.forEach(a => { const n = FROM[(a.src || '') + ':' + a.sym]; if (n) { a.sym = n.s; a.src = n.src; a.name = n.n; ac = true; } });
+  if (ac) Alerts.save(al);
 }
 
 /* ---------- wiring + startup ---------- */

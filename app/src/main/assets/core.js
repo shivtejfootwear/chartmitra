@@ -186,9 +186,10 @@ function settings() { return Object.assign({}, DEF_SET, Store.get('set', {})); }
 function setSetting(k, v) { const s = Store.get('set', {}); s[k] = v; Store.set('set', s); }
 
 /* ---------- symbols ---------- */
-// Gold and silver: Binance XAUUSDT / XAGUSDT contracts track spot metal price, live 24/7, free, no key
-const XAU_SYM = { s: 'XAUUSDT', n: 'XAUUSD', d: 'Gold Spot / U.S. Dollar', x: 'Binance', src: 'bf', cat: 'gold', cur: 'USD' };
-const XAG_SYM = { s: 'XAGUSDT', n: 'XAGUSD', d: 'Silver Spot / U.S. Dollar', x: 'Binance', src: 'bf', cat: 'silver', cur: 'USD' };
+// Gold: PAXG (Binance spot, 1 token = 1 oz gold, live 24/7, free). Silver: COMEX silver future (Yahoo).
+// The Binance XAUUSDT futures feed showed candles far from the real spot price, so it is no longer used.
+const XAU_SYM = { s: 'PAXGUSDT', n: 'XAUUSD', d: 'Gold Spot / U.S. Dollar', x: 'Binance', src: 'bn', cat: 'gold', cur: 'USD' };
+const XAG_SYM = { s: 'SI=F', n: 'XAGUSD', d: 'Silver Spot / U.S. Dollar (COMEX future)', x: 'COMEX', src: 'yf', cat: 'silver', cur: 'USD' };
 const isBin = s => !!s && (s.src === 'bn' || s.src === 'bf');
 const SYM_ICON = { in: ['#ff6d00', 'IN'], gold: ['#e8b84a', 'Au'], silver: ['#9598a1', 'Ag'], crypto: ['#f7931a', '₿'], us: ['#2962ff', 'US'], fx: ['#26a69a', 'FX'], other: ['#787b86', '•'] };
 const DEFAULT_WL = [
@@ -202,7 +203,6 @@ const DEFAULT_WL = [
   { name: 'Gold and commodities', items: [
     XAU_SYM, XAG_SYM,
     { s: 'GC=F', n: 'GOLD FUT', d: 'Gold Futures (COMEX)', x: 'COMEX', src: 'yf', cat: 'gold', cur: 'USD' },
-    { s: 'SI=F', n: 'SILVER FUT', d: 'Silver Futures (COMEX)', x: 'COMEX', src: 'yf', cat: 'silver', cur: 'USD' },
     { s: 'GOLDBEES.NS', n: 'GOLDBEES', d: 'Nippon India Gold ETF', x: 'NSE', src: 'yf', cat: 'gold', cur: 'INR' },
     { s: 'CL=F', n: 'CRUDE FUT', d: 'Crude Oil Futures (NYMEX)', x: 'NYMEX', src: 'yf', cat: 'other', cur: 'USD' }] },
   { name: 'Stocks', items: [
@@ -265,8 +265,6 @@ const BIN = {
   bf: { rest: ['https://fapi.binance.com'], k: '/fapi/v1/klines', t24: '/fapi/v1/ticker/24hr', ws: ['wss://fstream.binance.com'] }
 };
 const bnBase = BIN.bn.rest;
-// older history for Binance gold/silver futures (they start only at listing); COMEX future has decades of data
-const YF_OLD = { XAUUSDT: 'GC=F', XAGUSDT: 'SI=F' };
 const wsIdx = { bn: 0, bf: 0 };
 // live socket hosts: main one first, public market-data mirror if it is blocked in a region
 function bnSocket(path, m) {
@@ -324,15 +322,6 @@ async function loadHistory(sym, tfk, endTime) {
     let list = await bnKlines(sym.s, iv, 1000, endTime, m);
     if (n > 1 && iv === '1s') { // more 1s pages for second charts
       for (let p = 0; p < Math.min(3, n) && list.length; p++) { const more = await bnKlines(sym.s, iv, 1000, list[0].timestamp - 1, m); list = more.concat(list); }
-    }
-    // Binance gold/silver futures only go back to their listing; older history (daily and up) comes from the COMEX future
-    const old = YF_OLD[sym.s];
-    if (old && m === 'bf' && t.yf && !endTime && ['1D', '1W', '1M'].includes(tfk) && list.length) {
-      try {
-        const y = await yfChart(old, t.yf[0], t.yf[2]), first = list[0].timestamp;
-        const before = y.list.filter(k => k.timestamp < first);
-        if (before.length) list = before.concat(list);
-      } catch (e) { }
     }
     return { list: aggregate(list, n, t.ms, 0), meta: {}, base: list.slice(-n * 2) };
   }
