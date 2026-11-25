@@ -264,7 +264,7 @@ function initChart() {
   setInterval(tickCountdown, 1000);
   C.chart.subscribeAction('onTooltipIconClick', d => { try { indicatorIcon(d); } catch (e) { } });
   setupGestures();
-  setInterval(selfHeal, 5000);
+  setInterval(selfHeal, 1000);
   const cfg = Store.get('ind', null) || [{ n: 'STOCHRSI' }, { n: 'RSI' }];
   cfg.forEach(c => addIndicator(c.n, c.p, true, c.h));
 }
@@ -696,12 +696,16 @@ function showPivots(on) {
 
 /* ---------- self-heal: chart always matches the live data ---------- */
 function selfHeal() {
-  if (!C.chart || !C.sym || C.replay || !C.list.length || document.hidden) return;
+  if (!C.chart || !C.sym || C.replay || !C.list.length || document.hidden || C.listKey !== symKey(C.sym)) return;
   try {
     const dl = C.chart.getDataList(), a = dl[dl.length - 1], b = C.list[C.list.length - 1];
-    if (!a || a.timestamp !== b.timestamp || (settings().chartType !== 'heikin' && a.close !== b.close && !drawT)) {
-      C.chart.applyNewData(viewData(C.list), isBin(C.sym)); restoreDrawings(); drawAlertLines();
-    }
+    // the chart must show exactly the candles behind the price line; if they differ and no draw is pending, redraw from the list
+    const differs = !a || a.timestamp !== b.timestamp || dl.length !== C.list.length || (settings().chartType !== 'heikin' && a.close !== b.close);
+    // a normal 250 ms draw lag changes the chart's last candle between checks; a stuck chart does not: heal only then
+    // a chart holding fewer candles than the list stays short no matter how the newest candle moves
+    const sig = (a ? a.timestamp + '|' + a.close : '') + '|' + dl.length, lenBad = dl.length !== C.list.length;
+    if (differs && (sig === C._sig || (lenBad && dl.length === C._len))) { C.healed = (C.healed || 0) + 1; C.chart.applyNewData(viewData(C.list), isBin(C.sym)); restoreDrawings(); drawAlertLines(); }
+    C._sig = sig; C._len = dl.length;
     // crypto runs 24/7: if the newest candle is far behind the clock, reload
     if (isBin(C.sym) && Date.now() - b.timestamp > tfObj(C.tf).ms * 3 + 60000) loadData();
     // live socket silent for 20 s on a 24/7 market = stalled feed: reload so price and candles come back together
