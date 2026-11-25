@@ -387,7 +387,7 @@ function startLive(my) {
     };
     ws.onclose = () => { if (my === C.seq && C.live && !C.replay) setTimeout(() => { if (my !== C.seq || !C.live) return;
       if (Date.now() - (C.lastTick || 0) > t.ms * 3) { loadData(); return; } // long gap (phone slept): reload everything
-      bnKlines(C.sym.s, iv, 5, null, mk).then(l => l.forEach(pushBase)).catch(() => { }); startLive(my); }, 2000); };
+      bnKlines(C.sym.s, iv, 5, null, mk).then(l => { if (my === C.seq && C.live) l.forEach(pushBase); }).catch(() => { }); startLive(my); }, 2000); };
     C.ws = ws;
   } else {
     const [iv] = t.yf, win = Math.max(t.ms * 3, BASE_MS[iv] * 12, iv === '1d' || iv === '1wk' || iv === '1mo' ? 864e5 * 10 : 0);
